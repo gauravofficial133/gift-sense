@@ -1,7 +1,8 @@
 # GiftSense — Developer Makefile
 # Usage: make <target>
-# Requires: Go 1.22+, Node 18+, npm
+# Requires: Go 1.22+, Node 18+, npm, Git Bash (Windows)
 
+SHELL := bash
 ENV_FILE := .env
 
 # Load .env into make environment (ignore missing file)
@@ -40,28 +41,11 @@ dev:
 
 backend:
 	@echo "$(CYAN)Starting backend on :$(PORT)$(RESET)"
-	cd giftsense-backend && \
-	  OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  PINECONE_API_KEY=$(PINECONE_API_KEY) \
-	  PINECONE_ENVIRONMENT=$(PINECONE_ENVIRONMENT) \
-	  CHAT_MODEL=$(CHAT_MODEL) \
-	  EMBEDDING_MODEL=$(EMBEDDING_MODEL) \
-	  EMBEDDING_DIMENSIONS=$(EMBEDDING_DIMENSIONS) \
-	  MAX_TOKENS=$(MAX_TOKENS) \
-	  TOP_K=$(TOP_K) \
-	  NUM_RETRIEVAL_QUERIES=$(NUM_RETRIEVAL_QUERIES) \
-	  PINECONE_INDEX_NAME=$(PINECONE_INDEX_NAME) \
-	  MAX_FILE_SIZE_BYTES=$(MAX_FILE_SIZE_BYTES) \
-	  MAX_PROCESSED_MESSAGES=$(MAX_PROCESSED_MESSAGES) \
-	  CHUNK_WINDOW_SIZE=$(CHUNK_WINDOW_SIZE) \
-	  CHUNK_OVERLAP_SIZE=$(CHUNK_OVERLAP_SIZE) \
-	  PORT=$(PORT) \
-	  ALLOWED_ORIGINS=$(ALLOWED_ORIGINS) \
-	  go run ./cmd/server/
+	cd giftsense-backend && go run ./cmd/server/
 
 frontend:
 	@echo "$(CYAN)Starting frontend on :5173$(RESET)"
-	cd giftsense-frontend && VITE_API_URL=$(VITE_API_URL) npm run dev
+	cd giftsense-frontend && npm run dev
 
 # ── Quality targets ───────────────────────────────────────────────────────────
 
@@ -83,7 +67,7 @@ build-backend:
 
 build-frontend:
 	@echo "$(CYAN)Building frontend bundle...$(RESET)"
-	cd giftsense-frontend && VITE_API_URL=$(VITE_API_URL) npm run build
+	cd giftsense-frontend && npm run build
 
 # ── Setup targets ─────────────────────────────────────────────────────────────
 
