@@ -1,204 +1,319 @@
-# GiftSense — Deployment Guide (Render.com)
+# GiftSense — Deployment Guide (Vercel)
 
-GiftSense deploys as two services on Render:
-- **giftsense-backend** — Go/Gin web service (REST API)
-- **giftsense-frontend** — React/Vite static site (CDN-hosted)
+> **Platform:** Vercel Hobby (free tier)
+> **Vector DB:** Pinecone (serverless, existing)
+> **LLM / Embeddings:** OpenAI API
 
-Both are defined in `render.yaml` at the project root using Render Blueprints (IaC).
+---
+
+## Architecture overview
+
+```
+GitHub repo (monorepo)
+├── giftsense-backend/   → Vercel project A  (Go serverless function)
+└── giftsense-frontend/  → Vercel project B  (Vite static site, CDN)
+```
+
+Vercel does not run persistent HTTP servers. The backend is adapted with a
+single `api/index.go` entry point that wraps the existing Gin engine via
+`ServeHTTP`. All business logic, adapters, and tests are unchanged.
+
+---
+
+## Codebase changes made for Vercel
+
+| File | Change | Reason |
+|------|--------|--------|
+| `giftsense-backend/api/index.go` | **New** | Vercel serverless entry point — wraps Gin via `ServeHTTP`, wired with `sync.Once` so the engine is built once per cold start |
+| `giftsense-backend/vercel.json` | **New** | Rewrite all inbound paths to `api/index`; sets `maxDuration: 60` |
+| `giftsense-frontend/vercel.json` | **New** | SPA rewrite — all paths serve `index.html` |
+| `cmd/server/main.go` | **Unchanged** | Still used for `go run ./cmd/server` local development |
+
+**Nothing else changed.** Domain, ports, usecases, adapters, tests, config — all
+identical. The Vercel entry point is additive only.
+
+### Why wrap Gin instead of replacing it?
+
+Vercel's Go runtime accepts any `func(http.ResponseWriter, *http.Request)`.
+`gin.Engine` implements `http.Handler`, so `ginRouter.ServeHTTP(w, r)` routes
+the request through the full Gin stack — middleware (CORS, size limiter,
+recovery), path matching, and handlers — exactly as in local development.
+No routing logic is duplicated.
+
+### Trade-offs
+
+| Decision | Alternative considered | Why this choice |
+|----------|----------------------|-----------------|
+| Single `api/index.go` catches all routes | One file per endpoint | Avoids duplicating CORS + size-limiter middleware setup; keeps Gin as the single source of routing truth |
+| `sync.Once` for engine init | Init on every request | Reusing the Gin engine across warm requests avoids re-creating clients on every call; negligible overhead vs. actual OpenAI/Pinecone latency |
+| `maxDuration: 60` | 300 (Fluid compute) | 60 s is safe for the Hobby plan regardless of Fluid compute status; the analyze pipeline completes in 10–30 s in practice |
+| `cmd/server/main.go` kept intact | Remove it | Local dev (`go run`) and CI still work without needing Vercel CLI |
 
 ---
 
 ## Prerequisites
 
-Before deploying, make sure you have:
+| Requirement | Detail |
+|-------------|--------|
+| Vercel account | Free Hobby plan — [vercel.com](https://vercel.com) |
+| GitHub repo | Push this monorepo to a **personal** GitHub account (Hobby plan does not support org repos) |
+| OpenAI API key | Access to `gpt-4o` and `text-embedding-3-small` |
+| Pinecone account | Free Serverless index already created (see below) |
 
-| Requirement | Details |
-|-------------|---------|
-| Render account | Free tier is fine — [render.com](https://render.com) |
-| GitHub repo | Push this project to a GitHub repository |
-| OpenAI API key | Needs access to `gpt-4o` and `text-embedding-3-small` |
-| Pinecone account | Free tier works — [pinecone.io](https://pinecone.io) |
-| Pinecone index | Created **before** first deploy (see below) |
-
----
-
-## Step 1 — Create the Pinecone Index
-
-GiftSense uses Pinecone for vector storage. Create the index manually before deploying:
+### Pinecone index (if not already created)
 
 1. Log in to [app.pinecone.io](https://app.pinecone.io)
-2. Click **Create Index**
-3. Configure with these exact settings:
+2. **Create Index** with these exact settings:
 
    | Setting | Value |
    |---------|-------|
-   | Index name | `giftsense` |
+   | Name | `giftsense` |
    | Dimensions | `1536` |
    | Metric | `Cosine` |
    | Type | `Serverless` |
-   | Cloud | `AWS` |
-   | Region | `us-east-1` |
+   | Cloud / Region | `AWS us-east-1` |
 
-4. Copy your **API key** from the Pinecone dashboard (you'll need it in Step 3)
-5. Note your **environment** — for serverless it is `us-east-1`
+3. Copy the **API key** and note the **environment** (`us-east-1`)
 
 ---
 
-## Step 2 — Push to GitHub
+## Step-by-step deployment
+
+### Step 1 — Push to GitHub
 
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/gift-sense.git
-git push -u origin main
+# from the repo root
+git push origin main
 ```
 
-The `render.yaml` at the project root must be committed and visible on GitHub.
+Both `giftsense-backend/api/index.go` and the `vercel.json` files must be
+committed and on the branch you will deploy from.
 
 ---
 
-## Step 3 — Deploy via Render Blueprint
+### Step 2 — Create the backend Vercel project
 
-Render Blueprints read `render.yaml` and deploy all services in one shot.
-
-1. Log in to [dashboard.render.com](https://dashboard.render.com)
-2. Click **New → Blueprint**
-3. Connect your GitHub account if prompted, then select the **gift-sense** repository
-4. Click **Connect**
-5. Set a **Blueprint name** (e.g. `giftsense`)
-6. Leave branch as `main`
-7. Click **Apply** — Render will detect both services from `render.yaml`
-8. You will be prompted to fill in the `sync: false` environment variables (the ones without values in `render.yaml`). Enter placeholder values for now and click **Apply** — you will update the real values in Step 4
-
-> **Why placeholders first?** The two services need to know each other's URLs (`ALLOWED_ORIGINS` and `VITE_API_URL`), which only exist after the first deploy completes. Deploy with placeholders, get the URLs, then update both services.
-
-Render will now build both services. The build takes 2–5 minutes:
-- Backend: runs `go build -o server ./cmd/server`
-- Frontend: runs `npm install && npm run build`, publishes `dist/`
+1. Go to [vercel.com/new](https://vercel.com/new) → **Add New Project**
+2. Import the `gift-sense` GitHub repository
+3. In **Configure Project**:
+   - **Framework Preset:** Other
+   - **Root Directory:** `giftsense-backend` ← **critical**
+   - Build & Output settings: leave blank (Vercel detects Go automatically)
+4. Click **Deploy** — it will fail on the first deploy because env vars are not set yet. That is expected.
 
 ---
 
-## Step 4 — Set Secret Environment Variables
+### Step 3 — Set backend environment variables
 
-Once both services are deployed, you will have two `.onrender.com` URLs. Now set the real values.
+In **Vercel Dashboard → giftsense-backend → Settings → Environment Variables**,
+add the following for the **Production** environment:
 
-### Backend service (`giftsense-backend`)
+| Variable | Value | Required |
+|----------|-------|----------|
+| `OPENAI_API_KEY` | `sk-...` | ✅ |
+| `PINECONE_API_KEY` | `pcsk-...` | ✅ |
+| `PINECONE_ENVIRONMENT` | `us-east-1` | ✅ |
+| `ALLOWED_ORIGINS` | _(leave blank for now — fill in after Step 5)_ | ✅ |
+| `PINECONE_INDEX_NAME` | `giftsense` | optional (default applied) |
+| `CHAT_MODEL` | `gpt-4o` | optional |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | optional |
+| `EMBEDDING_DIMENSIONS` | `1536` | optional |
+| `MAX_TOKENS` | `1000` | optional |
+| `TOP_K` | `3` | optional |
+| `NUM_RETRIEVAL_QUERIES` | `4` | optional |
+| `MAX_FILE_SIZE_BYTES` | `2097152` | optional |
+| `MAX_PROCESSED_MESSAGES` | `400` | optional |
+| `CHUNK_WINDOW_SIZE` | `8` | optional |
+| `CHUNK_OVERLAP_SIZE` | `3` | optional |
 
-Go to **Dashboard → giftsense-backend → Environment**:
+After saving, trigger a **Redeploy** from the Deployments tab.
 
-| Variable | Value |
-|----------|-------|
-| `OPENAI_API_KEY` | Your OpenAI API key (`sk-...`) |
-| `PINECONE_API_KEY` | Your Pinecone API key |
-| `PINECONE_ENVIRONMENT` | `us-east-1` |
-| `ALLOWED_ORIGINS` | The frontend URL, e.g. `https://giftsense-frontend.onrender.com` |
-
-Click **Save Changes** — Render will redeploy the backend automatically.
-
-### Frontend service (`giftsense-frontend`)
-
-Go to **Dashboard → giftsense-frontend → Environment**:
-
-| Variable | Value |
-|----------|-------|
-| `VITE_API_URL` | The backend URL, e.g. `https://giftsense-backend.onrender.com` |
-
-Click **Save Changes** — Render will rebuild and redeploy the frontend.
-
-> **Important:** `VITE_API_URL` is a build-time variable (Vite embeds it at build time). Changing it always triggers a full rebuild of the frontend.
+> **Note:** Environment variable changes only take effect on the next deployment.
+> Vercel does not hot-reload running functions.
 
 ---
 
-## Step 5 — Verify the Deployment
+### Step 4 — Verify the backend
 
-### Health check
+Once deployed, your backend URL will be `https://giftsense-backend-<hash>.vercel.app`
+(visible in the Vercel dashboard).
+
 ```bash
-curl https://giftsense-backend.onrender.com/health
+# Health check
+curl https://giftsense-backend-<hash>.vercel.app/health
 # Expected: {"status":"ok"}
 ```
 
-### CORS check
-```bash
-curl -H "Origin: https://giftsense-frontend.onrender.com" \
-     -I https://giftsense-backend.onrender.com/health
-# Expected headers include:
-# Access-Control-Allow-Origin: https://giftsense-frontend.onrender.com
+If you get a 500, check **Vercel Dashboard → giftsense-backend → Functions → Logs**
+for the startup error (almost always a missing env var).
+
+---
+
+### Step 5 — Create the frontend Vercel project
+
+1. Go to [vercel.com/new](https://vercel.com/new) → **Add New Project**
+2. Import the same `gift-sense` repository
+3. In **Configure Project**:
+   - **Framework Preset:** Vite _(auto-detected)_
+   - **Root Directory:** `giftsense-frontend` ← **critical**
+   - Build Command: `vite build` _(auto-detected)_
+   - Output Directory: `dist` _(auto-detected)_
+4. Before deploying, set this environment variable:
+
+   | Variable | Value |
+   |----------|-------|
+   | `VITE_API_URL` | `https://giftsense-backend-<hash>.vercel.app` |
+
+5. Click **Deploy**
+
+> `VITE_API_URL` is a **build-time** variable — Vite embeds it into the JS bundle.
+> Changing it always requires a full rebuild and redeploy of the frontend.
+
+---
+
+### Step 6 — Wire CORS
+
+Now that you have both URLs, go back to the **backend** project:
+
+**Settings → Environment Variables → `ALLOWED_ORIGINS`**
+
+Set the value to your frontend URL (no trailing slash):
+
+```
+https://giftsense-frontend-<hash>.vercel.app
 ```
 
-### End-to-end smoke test
-Open `https://giftsense-frontend.onrender.com` in your browser, upload a `.txt` WhatsApp export, fill in the form, and submit. The first request after a cold start may take ~60 seconds (see Free Tier section below).
+Trigger a **Redeploy** of the backend.
+
+Verify CORS is working:
+
+```bash
+curl -H "Origin: https://giftsense-frontend-<hash>.vercel.app" \
+     -I https://giftsense-backend-<hash>.vercel.app/health
+# Must include: Access-Control-Allow-Origin: https://giftsense-frontend-<hash>.vercel.app
+```
 
 ---
 
-## Free Tier Limitations
+### Step 7 — Smoke test
 
-| Limitation | Impact |
-|------------|--------|
-| **Cold starts** | Free web services spin down after **15 minutes of inactivity**. The next request takes ~60 seconds to wake the backend. The frontend (static site) is always fast — only the API has cold starts. |
-| **750 instance hours/month** per workspace | At one backend instance, that's ~31 days of continuous uptime. Spun-down time doesn't count. |
-| **Single instance** | No horizontal scaling on the free plan. |
-| **Ephemeral filesystem** | GiftSense has no local file storage — this is not an issue since all data goes to Pinecone and OpenAI. |
-| **Static site** | Deployed for free with global CDN — no cold starts. |
-
-### Handling cold starts gracefully
-The frontend's loading spinner remains visible while the backend wakes up — the `useAnalyze` hook has no timeout, so it will wait and then display results. No special handling needed.
-
-To avoid cold starts entirely, upgrade the backend to a **Starter** plan ($7/month), which keeps the instance always-on.
+Open your frontend URL in a browser, upload a `.txt` WhatsApp export, fill in
+the form, and submit. The first request after a cold start takes ~5–15 seconds
+(Pinecone index connection + OpenAI call). Subsequent warm requests are faster.
 
 ---
 
-## Automatic Deploys
+## Custom domains (optional)
 
-After setup, every push to `main` that changes `render.yaml` triggers a Blueprint sync. Every push (regardless of `render.yaml`) triggers a redeploy of both services via Render's auto-deploy feature.
+To use `api.giftsense.com` and `giftsense.com`:
 
-To disable auto-deploy for a service: **Dashboard → [service] → Settings → Auto-Deploy → Off**.
+1. **Vercel Dashboard → [project] → Settings → Domains → Add Domain**
+2. Add your domain and follow the DNS verification steps (Vercel provides the
+   exact records to add in your DNS provider)
+3. After adding a custom domain to the backend, update `ALLOWED_ORIGINS` on the
+   backend to the frontend custom domain, and `VITE_API_URL` on the frontend to
+   the backend custom domain
+4. Redeploy both projects
+
+---
+
+## Free tier limits and cold starts
+
+| Limit | Hobby Plan |
+|-------|-----------|
+| Serverless function invocations | 1,000,000 / month |
+| Function max duration | 60 s (conservative setting in `vercel.json`) |
+| Function memory | 1,024 MB |
+| Bandwidth | 100 GB / month |
+| Static site (frontend) | Always-on CDN, no cold starts |
+| Build minutes | 6,000 / month |
+
+### Cold start behaviour
+
+Vercel spins down idle function instances automatically. When the backend has not
+received traffic for a period, the next request triggers a cold start:
+
+- `sync.Once` initialises the Gin engine, OpenAI clients, and Pinecone client
+  (struct-only — no network call at init time)
+- Typical cold start adds **1–3 seconds** before the actual request executes
+- The frontend's loading spinner remains visible throughout — no special handling
+  needed in the UI
+
+To reduce cold starts on the free tier, you can set up a cron-based health ping
+(e.g., [UptimeRobot](https://uptimerobot.com) free tier pinging `/health` every
+5 minutes). This keeps the function warm without any code changes.
+
+---
+
+## Local development (unchanged)
+
+The Vercel entry point does not affect local development:
+
+```bash
+# Terminal 1 — backend (uses cmd/server/main.go, not api/index.go)
+cd giftsense-backend
+cp .env.example .env   # fill in your keys
+go run ./cmd/server/
+
+# Terminal 2 — frontend
+cd giftsense-frontend
+cp .env.example .env.local   # set VITE_API_URL=http://localhost:8080
+npm run dev
+```
+
+Vercel CLI (`vercel dev`) can also be used to simulate the serverless environment
+locally, but `go run` is simpler for day-to-day development.
 
 ---
 
 ## Troubleshooting
 
-### Backend won't start
-Check **Dashboard → giftsense-backend → Logs**. Common causes:
-- Missing required env var → look for `config: ... is required` in logs
-- `OPENAI_API_KEY` not set → `config: OPENAI_API_KEY is required`
-- `PINECONE_API_KEY` not set → `config: PINECONE_API_KEY is required`
-- `PINECONE_ENVIRONMENT` not set → `config: PINECONE_ENVIRONMENT is required`
+### Backend returns 500 on all requests
+Check **Functions → Logs** in the Vercel dashboard. The startup error is logged
+before the 500 is returned. Common causes:
 
-### CORS errors in browser console
-`ALLOWED_ORIGINS` on the backend must match the frontend URL **exactly** (no trailing slash):
-```
-# Correct
-ALLOWED_ORIGINS=https://giftsense-frontend.onrender.com
+| Log message | Fix |
+|-------------|-----|
+| `OPENAI_API_KEY environment variable is required` | Add the env var and redeploy |
+| `PINECONE_API_KEY environment variable is required` | Add the env var and redeploy |
+| `PINECONE_ENVIRONMENT environment variable is required` | Add the env var and redeploy |
+| `failed to create Pinecone client` | Invalid API key format |
 
-# Wrong (trailing slash causes mismatch)
-ALLOWED_ORIGINS=https://giftsense-frontend.onrender.com/
-```
+### CORS error in browser console
+`ALLOWED_ORIGINS` must exactly match the frontend URL — no trailing slash, correct
+scheme (`https://`). A mismatch causes the browser to block the response even
+though the request reaches the backend.
 
-### Frontend shows "Request failed" or network error
-- Confirm `VITE_API_URL` is set to the backend URL (no trailing slash)
-- Confirm the backend health check returns 200
-- Check the browser Network tab — if the request goes to `localhost:8080`, the frontend was built before `VITE_API_URL` was set. Trigger a manual redeploy of the frontend.
+### Frontend shows "Request failed" / network error
+- Open browser DevTools → Network → check what URL the request goes to
+- If it hits `localhost:8080`, the frontend was built before `VITE_API_URL` was
+  set. Trigger a manual redeploy of the frontend project.
+- If it hits the correct Vercel URL but returns a non-200, check the backend logs.
 
-### Pinecone errors
-- Confirm the index name in Render matches `PINECONE_INDEX_NAME` (default: `giftsense`)
-- Confirm dimensions are exactly `1536` (must match `EMBEDDING_DIMENSIONS`)
-- Confirm the region matches `PINECONE_ENVIRONMENT`
+### "conversation has too few messages"
+The `.txt` export must contain at least 5 parseable messages. Export the full chat
+history from WhatsApp (not a snippet), without media filtering.
 
-### Conversation too short error
-The file must contain at least 5 parseable messages. Export the full WhatsApp chat (not just a few lines) as a `.txt` file without media.
-
----
-
-## Custom Domain (Optional)
-
-To use a custom domain (e.g. `giftsense.yourdomain.com`):
-
-1. Go to **Dashboard → giftsense-frontend → Settings → Custom Domains**
-2. Add your domain and follow the DNS verification steps
-3. Update `ALLOWED_ORIGINS` on the backend to your custom domain
-4. Update `VITE_API_URL` on the frontend if you also set a custom domain for the backend
+### Function timeout (60 s exceeded)
+Unlikely under normal load, but if it occurs:
+- Check OpenAI API status at [status.openai.com](https://status.openai.com)
+- Check Pinecone status at [status.pinecone.io](https://status.pinecone.io)
+- Increase `maxDuration` in `giftsense-backend/vercel.json` (up to 300 on Hobby
+  with Fluid compute enabled)
 
 ---
 
-## Environment Variable Reference
+## Automatic deploys
+
+Every `git push` to `main` triggers a redeploy of both Vercel projects. Vercel
+detects which project's Root Directory contains changed files and skips unchanged
+projects automatically.
+
+To disable auto-deploy: **Project → Settings → Git → Auto Deploy → Off**
+
+---
+
+## Environment variable reference
 
 ### Backend (`giftsense-backend`)
 
@@ -207,8 +322,8 @@ To use a custom domain (e.g. `giftsense.yourdomain.com`):
 | `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
 | `PINECONE_API_KEY` | ✅ | — | Pinecone API key |
 | `PINECONE_ENVIRONMENT` | ✅ | — | Pinecone region (e.g. `us-east-1`) |
-| `ALLOWED_ORIGINS` | ✅ | — | Frontend URL for CORS (comma-separated for multiple) |
-| `PINECONE_INDEX_NAME` | | `giftsense` | Must match your Pinecone index name |
+| `ALLOWED_ORIGINS` | ✅ | `http://localhost:5173` | Frontend URL for CORS |
+| `PINECONE_INDEX_NAME` | | `giftsense` | Pinecone index name |
 | `CHAT_MODEL` | | `gpt-4o` | OpenAI chat model |
 | `EMBEDDING_MODEL` | | `text-embedding-3-small` | OpenAI embedding model |
 | `EMBEDDING_DIMENSIONS` | | `1536` | Must match Pinecone index dimensions |
@@ -217,12 +332,12 @@ To use a custom domain (e.g. `giftsense.yourdomain.com`):
 | `NUM_RETRIEVAL_QUERIES` | | `4` | Parallel retrieval queries |
 | `MAX_FILE_SIZE_BYTES` | | `2097152` | 2 MB upload limit |
 | `MAX_PROCESSED_MESSAGES` | | `400` | Max messages sampled from chat |
-| `CHUNK_WINDOW_SIZE` | | `8` | Sliding window size for chunking |
+| `CHUNK_WINDOW_SIZE` | | `8` | Sliding window size |
 | `CHUNK_OVERLAP_SIZE` | | `3` | Overlap between chunks |
-| `PORT` | | `8080` | Set automatically by Render |
+| `PORT` | | `8080` | Used by local `go run` only; ignored by Vercel |
 
 ### Frontend (`giftsense-frontend`)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_API_URL` | ✅ | — | Backend service URL (no trailing slash) |
+| `VITE_API_URL` | ✅ | — | Backend Vercel URL (no trailing slash) |
