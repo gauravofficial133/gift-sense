@@ -1,0 +1,12 @@
+package port
+
+import "context"
+
+type CompletionOptions struct {
+	MaxTokens int
+	JSONMode  bool
+}
+
+type LLMClient interface {
+	Complete(ctx context.Context, prompt string, opts CompletionOptions) (string, error)
+}

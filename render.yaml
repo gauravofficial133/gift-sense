@@ -1,0 +1,50 @@
+services:
+  # ── Backend ─────────────────────────────────────────────────────────────────
+  - type: web
+    name: giftsense-backend
+    runtime: go
+    rootDir: giftsense-backend
+    buildCommand: go build -o server ./cmd/server
+    startCommand: ./server
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_ENVIRONMENT
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        value: giftsense
+      - key: CHAT_MODEL
+        value: gpt-4o
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: EMBEDDING_DIMENSIONS
+        value: "1536"
+      - key: MAX_TOKENS
+        value: "1000"
+      - key: TOP_K
+        value: "3"
+      - key: NUM_RETRIEVAL_QUERIES
+        value: "4"
+      - key: MAX_FILE_SIZE_BYTES
+        value: "2097152"
+      - key: MAX_PROCESSED_MESSAGES
+        value: "400"
+      - key: CHUNK_WINDOW_SIZE
+        value: "8"
+      - key: CHUNK_OVERLAP_SIZE
+        value: "3"
+      - key: ALLOWED_ORIGINS
+        sync: false   # Set to your Render static site URL after deploy
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  - type: web
+    name: giftsense-frontend
+    runtime: static
+    rootDir: giftsense-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false   # Set to your giftsense-backend Render URL after deploy
