@@ -1,8 +1,9 @@
 import { RotateCcw, Gift } from 'lucide-react'
 import InsightCard from '../components/results/InsightCard'
 import GiftCard from '../components/results/GiftCard'
+import FeedbackWidget from '../components/results/FeedbackWidget'
 
-export default function ResultsScreen({ result, onReset }) {
+export default function ResultsScreen({ result, onReset, sessionId, budgetTier }) {
   const { personality_insights = [], gift_suggestions = [] } = result ?? {}
 
   return (
@@ -46,11 +47,18 @@ export default function ResultsScreen({ result, onReset }) {
                   estimatedPriceInr={gift.estimated_price_inr}
                   category={gift.category}
                   links={gift.links}
+                  sessionId={sessionId}
                 />
               ))}
             </div>
           </section>
         )}
+
+        <FeedbackWidget
+          sessionId={sessionId}
+          budgetTier={budgetTier}
+          suggestionCount={gift_suggestions.length}
+        />
 
         <p className="mt-8 text-center text-xs text-gray-400">
           Your conversation was anonymised and has not been stored.

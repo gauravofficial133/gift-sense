@@ -32,3 +32,60 @@ export async function analyzeConversation({ sessionId, file, name, relation, gen
 
   return res.json()
 }
+
+/**
+ * Submits user feedback to the backend.
+ *
+ * @param {object} payload
+ * @param {string} payload.session_id
+ * @param {string} payload.satisfaction - "helpful" | "not_helpful"
+ * @param {string} [payload.purchase_intent] - "definitely" | "maybe" | "probably_not"
+ * @param {string[]} [payload.issues]
+ * @param {string} [payload.free_text]
+ * @param {string} payload.budget_tier
+ * @param {number} payload.suggestion_count
+ * @returns {Promise<{message: string}>}
+ */
+export async function submitFeedback(payload) {
+  const res = await fetch(`${API_URL}/api/v1/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Feedback submission failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
+ * Tracks an analytics event (fire-and-forget). Never throws.
+ *
+ * @param {object} payload
+ * @param {string} payload.session_id
+ * @param {string} payload.event_type - "link_click"
+ * @param {string} payload.target
+ * @param {object} [payload.metadata]
+ */
+export async function trackEvent(payload) {
+  try {
+    const body = JSON.stringify(payload)
+
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' })
+      navigator.sendBeacon(`${API_URL}/api/v1/events`, blob)
+      return
+    }
+
+    await fetch(`${API_URL}/api/v1/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    })
+  } catch {
+    // Fire-and-forget: analytics never degrades UX
+  }
+}

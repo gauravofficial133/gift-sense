@@ -6,9 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/giftsense/backend/config"
+	"github.com/giftsense/backend/internal/adapter/feedbackstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
+	"github.com/giftsense/backend/internal/database"
+	"github.com/giftsense/backend/internal/database/migration"
 	handler "github.com/giftsense/backend/internal/delivery/http"
 	"github.com/giftsense/backend/internal/usecase"
 )
@@ -53,6 +56,28 @@ func main() {
 
 	v1 := router.Group("/api/v1")
 	v1.POST("/analyze", analyzeHandler.Analyze)
+
+	if cfg.HasDatabase() {
+		db, dbErr := database.Connect(cfg.DatabaseURL)
+		if dbErr != nil {
+			log.Fatalf("database: %v", dbErr)
+		}
+
+		if migErr := migration.RunMigrations(db); migErr != nil {
+			log.Fatalf("migrations: %v", migErr)
+		}
+
+		fbStore := feedbackstore.NewGormFeedbackStore(db)
+		fbService := usecase.NewFeedbackService(fbStore)
+		fbHandler := handler.NewFeedbackHandler(fbService)
+
+		v1.POST("/feedback", fbHandler.SubmitFeedback)
+		v1.POST("/events", fbHandler.TrackEvent)
+
+		log.Println("Feedback endpoints enabled (DATABASE_URL configured)")
+	} else {
+		log.Println("Feedback endpoints disabled (DATABASE_URL not set)")
+	}
 
 	addr := ":" + cfg.Port
 	log.Printf("GiftSense backend listening on %s", addr)

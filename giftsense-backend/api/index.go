@@ -1,7 +1,3 @@
-// Package handler is the Vercel serverless entry point for the GiftSense backend.
-// Vercel requires Go handler files in api/ with an exported http.HandlerFunc.
-// The Gin engine is wired once per cold start via sync.Once and reused across
-// subsequent requests within the same Lambda instance.
 package handler
 
 import (
@@ -12,9 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/giftsense/backend/config"
+	"github.com/giftsense/backend/internal/adapter/feedbackstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
+	"github.com/giftsense/backend/internal/database"
+	"github.com/giftsense/backend/internal/database/migration"
 	deliveryhttp "github.com/giftsense/backend/internal/delivery/http"
 	"github.com/giftsense/backend/internal/usecase"
 )
@@ -25,8 +24,6 @@ var (
 	once      sync.Once
 )
 
-// Handler is the single Vercel function that receives all HTTP requests.
-// vercel.json rewrites route every inbound path here; Gin handles routing internally.
 func Handler(w http.ResponseWriter, r *http.Request) {
 	once.Do(func() { ginRouter, initErr = buildRouter() })
 	if initErr != nil {
@@ -40,9 +37,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	ginRouter.ServeHTTP(w, r)
 }
 
-// buildRouter wires all dependencies and returns a fully configured Gin engine.
-// Its logic is intentionally identical to cmd/server/main.go so local and
-// serverless environments behave the same way.
 func buildRouter() (*gin.Engine, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -84,6 +78,30 @@ func buildRouter() (*gin.Engine, error) {
 	r.GET("/health", deliveryhttp.Health)
 	v1 := r.Group("/api/v1")
 	v1.POST("/analyze", analyzeHandler.Analyze)
+
+	if cfg.HasDatabase() {
+		db, dbErr := database.Connect(cfg.DatabaseURL)
+		if dbErr != nil {
+			log.Printf("database connection failed, feedback endpoints disabled: %v", dbErr)
+			return r, nil
+		}
+
+		if migErr := migration.RunMigrations(db); migErr != nil {
+			log.Printf("migrations failed, feedback endpoints disabled: %v", migErr)
+			return r, nil
+		}
+
+		fbStore := feedbackstore.NewGormFeedbackStore(db)
+		fbService := usecase.NewFeedbackService(fbStore)
+		fbHandler := deliveryhttp.NewFeedbackHandler(fbService)
+
+		v1.POST("/feedback", fbHandler.SubmitFeedback)
+		v1.POST("/events", fbHandler.TrackEvent)
+
+		log.Println("Feedback endpoints enabled (DATABASE_URL configured)")
+	} else {
+		log.Println("Feedback endpoints disabled (DATABASE_URL not set)")
+	}
 
 	return r, nil
 }

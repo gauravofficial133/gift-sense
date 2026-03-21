@@ -1,7 +1,7 @@
 import { Tag } from 'lucide-react'
 import ShoppingLinks from './ShoppingLinks'
 
-export default function GiftCard({ name, reason, estimatedPriceInr, category, links }) {
+export default function GiftCard({ name, reason, estimatedPriceInr, category, links, sessionId }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
@@ -19,7 +19,7 @@ export default function GiftCard({ name, reason, estimatedPriceInr, category, li
           {category}
         </div>
       )}
-      <ShoppingLinks links={links} />
+      <ShoppingLinks links={links} sessionId={sessionId} giftName={name} />
     </div>
   )
 }

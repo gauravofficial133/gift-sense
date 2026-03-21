@@ -25,11 +25,11 @@ func NewEmbedder(apiKey, model string, dimensions int) (*Embedder, error) {
 	return &Embedder{client: client, model: model, dimensions: dimensions}, nil
 }
 
-func (e *Embedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	resp, err := e.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Model:      openai.EmbeddingModel(e.model),
+func (embedder *Embedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	resp, err := embedder.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+		Model:      openai.EmbeddingModel(embedder.model),
 		Input:      openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: texts},
-		Dimensions: openai.Int(int64(e.dimensions)),
+		Dimensions: openai.Int(int64(embedder.dimensions)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("embedding API call failed: %w", err)

@@ -36,14 +36,14 @@ func NewLLMClient(apiKey, model string, maxTokens int) (*LLMClient, error) {
 	return &LLMClient{client: client, model: model, maxTokens: maxTokens}, nil
 }
 
-func (l *LLMClient) Complete(ctx context.Context, prompt string, opts port.CompletionOptions) (string, error) {
-	maxTokens := l.maxTokens
+func (llmClient *LLMClient) Complete(ctx context.Context, prompt string, opts port.CompletionOptions) (string, error) {
+	maxTokens := llmClient.maxTokens
 	if opts.MaxTokens > 0 {
 		maxTokens = opts.MaxTokens
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:     shared.ChatModel(l.model),
+		Model:     shared.ChatModel(llmClient.model),
 		MaxTokens: openai.Int(int64(maxTokens)),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(giftsenseSystemPrompt),
@@ -57,7 +57,7 @@ func (l *LLMClient) Complete(ctx context.Context, prompt string, opts port.Compl
 		}
 	}
 
-	resp, err := l.client.Chat.Completions.New(ctx, params)
+	resp, err := llmClient.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return "", fmt.Errorf("chat completion failed: %w", err)
 	}

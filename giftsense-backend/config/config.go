@@ -24,6 +24,11 @@ type Config struct {
 	ChunkOverlapSize     int
 	Port                 string
 	AllowedOrigins       []string
+	DatabaseURL          string
+}
+
+func (c *Config) HasDatabase() bool {
+	return c.DatabaseURL != ""
 }
 
 func Load() (*Config, error) {
@@ -71,6 +76,7 @@ func loadOptionals(cfg *Config) {
 	cfg.ChunkOverlapSize = getEnvInt("CHUNK_OVERLAP_SIZE", 3)
 	cfg.Port = getEnvString("PORT", "8080")
 	cfg.AllowedOrigins = parseOrigins(getEnvString("ALLOWED_ORIGINS", "http://localhost:5173"))
+	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 }
 
 func getEnvString(key, defaultVal string) string {
