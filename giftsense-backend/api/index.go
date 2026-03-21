@@ -11,6 +11,7 @@ import (
 	"github.com/giftsense/backend/internal/adapter/feedbackstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
+	"github.com/giftsense/backend/internal/adapter/ratelimiter"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
 	"github.com/giftsense/backend/internal/database"
 	"github.com/giftsense/backend/internal/database/migration"
@@ -77,19 +78,23 @@ func buildRouter() (*gin.Engine, error) {
 
 	r.GET("/health", deliveryhttp.Health)
 	v1 := r.Group("/api/v1")
-	v1.POST("/analyze", analyzeHandler.Analyze)
 
 	if cfg.HasDatabase() {
 		db, dbErr := database.Connect(cfg.DatabaseURL)
 		if dbErr != nil {
-			log.Printf("database connection failed, feedback endpoints disabled: %v", dbErr)
+			log.Printf("database connection failed, feedback/rate-limit disabled: %v", dbErr)
+			v1.POST("/analyze", analyzeHandler.Analyze)
 			return r, nil
 		}
 
 		if migErr := migration.RunMigrations(db); migErr != nil {
-			log.Printf("migrations failed, feedback endpoints disabled: %v", migErr)
+			log.Printf("migrations failed, feedback/rate-limit disabled: %v", migErr)
+			v1.POST("/analyze", analyzeHandler.Analyze)
 			return r, nil
 		}
+
+		rateLimiter := ratelimiter.NewDBRateLimiter(db, cfg.RateLimitPerMinute)
+		v1.POST("/analyze", deliveryhttp.RateLimit(rateLimiter), analyzeHandler.Analyze)
 
 		fbStore := feedbackstore.NewGormFeedbackStore(db)
 		fbService := usecase.NewFeedbackService(fbStore)
@@ -98,9 +103,10 @@ func buildRouter() (*gin.Engine, error) {
 		v1.POST("/feedback", fbHandler.SubmitFeedback)
 		v1.POST("/events", fbHandler.TrackEvent)
 
-		log.Println("Feedback endpoints enabled (DATABASE_URL configured)")
+		log.Println("Feedback + rate limiting enabled (DATABASE_URL configured)")
 	} else {
-		log.Println("Feedback endpoints disabled (DATABASE_URL not set)")
+		v1.POST("/analyze", analyzeHandler.Analyze)
+		log.Println("Feedback + rate limiting disabled (DATABASE_URL not set)")
 	}
 
 	return r, nil

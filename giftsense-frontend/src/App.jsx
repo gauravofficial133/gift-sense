@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import { useSession } from './hooks/useSession'
 import { useAnalyze } from './hooks/useAnalyze'
 import InputScreen from './screens/InputScreen'
@@ -15,18 +17,22 @@ export default function App() {
     analyze(formData)
   }
 
-  if (state === 'loading') return <LoadingScreen />
-
-  if (state === 'success') {
-    return (
-      <ResultsScreen
-        result={result}
-        onReset={reset}
-        sessionId={sessionId}
-        budgetTier={budgetTier}
-      />
-    )
-  }
-
-  return <InputScreen onSubmit={handleSubmit} error={error} onErrorDismiss={reset} />
+  return (
+    <>
+      {state === 'loading' ? (
+        <LoadingScreen />
+      ) : state === 'success' ? (
+        <ResultsScreen
+          result={result}
+          onReset={reset}
+          sessionId={sessionId}
+          budgetTier={budgetTier}
+        />
+      ) : (
+        <InputScreen onSubmit={handleSubmit} error={error} onErrorDismiss={reset} />
+      )}
+      <Analytics />
+      <SpeedInsights />
+    </>
+  )
 }

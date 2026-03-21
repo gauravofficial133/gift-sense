@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -23,6 +24,20 @@ func ValidateConversationFile(fh *multipart.FileHeader, maxBytes int64) (string,
 		return "", fmt.Errorf("open uploaded file: %w", err)
 	}
 	defer f.Close()
+
+	head := make([]byte, 512)
+	n, err := f.Read(head)
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("read file header: %w", err)
+	}
+	contentType := http.DetectContentType(head[:n])
+	if !strings.HasPrefix(contentType, "text/") {
+		return "", domain.ErrInvalidFileType
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("seek uploaded file: %w", err)
+	}
+
 	raw, err := io.ReadAll(f)
 	if err != nil {
 		return "", fmt.Errorf("read uploaded file: %w", err)

@@ -9,6 +9,7 @@ import (
 	"github.com/giftsense/backend/internal/adapter/feedbackstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
+	"github.com/giftsense/backend/internal/adapter/ratelimiter"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
 	"github.com/giftsense/backend/internal/database"
 	"github.com/giftsense/backend/internal/database/migration"
@@ -55,7 +56,6 @@ func main() {
 	router.GET("/health", handler.Health)
 
 	v1 := router.Group("/api/v1")
-	v1.POST("/analyze", analyzeHandler.Analyze)
 
 	if cfg.HasDatabase() {
 		db, dbErr := database.Connect(cfg.DatabaseURL)
@@ -67,6 +67,9 @@ func main() {
 			log.Fatalf("migrations: %v", migErr)
 		}
 
+		rateLimiter := ratelimiter.NewDBRateLimiter(db, cfg.RateLimitPerMinute)
+		v1.POST("/analyze", handler.RateLimit(rateLimiter), analyzeHandler.Analyze)
+
 		fbStore := feedbackstore.NewGormFeedbackStore(db)
 		fbService := usecase.NewFeedbackService(fbStore)
 		fbHandler := handler.NewFeedbackHandler(fbService)
@@ -74,9 +77,10 @@ func main() {
 		v1.POST("/feedback", fbHandler.SubmitFeedback)
 		v1.POST("/events", fbHandler.TrackEvent)
 
-		log.Println("Feedback endpoints enabled (DATABASE_URL configured)")
+		log.Println("Feedback + rate limiting enabled (DATABASE_URL configured)")
 	} else {
-		log.Println("Feedback endpoints disabled (DATABASE_URL not set)")
+		v1.POST("/analyze", analyzeHandler.Analyze)
+		log.Println("Feedback + rate limiting disabled (DATABASE_URL not set)")
 	}
 
 	addr := ":" + cfg.Port

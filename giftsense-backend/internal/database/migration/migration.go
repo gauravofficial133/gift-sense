@@ -32,6 +32,14 @@ type AnalyticsEventModel struct {
 
 func (AnalyticsEventModel) TableName() string { return "analytics_events" }
 
+type RateLimitModel struct {
+	IPAddress   string    `gorm:"type:varchar(45);primaryKey"`
+	WindowStart time.Time `gorm:"primaryKey"`
+	Count       int       `gorm:"not null;default:1"`
+}
+
+func (RateLimitModel) TableName() string { return "rate_limits" }
+
 func RunMigrations(db *gorm.DB) error {
-	return db.AutoMigrate(&FeedbackModel{}, &AnalyticsEventModel{})
+	return db.AutoMigrate(&FeedbackModel{}, &AnalyticsEventModel{}, &RateLimitModel{})
 }

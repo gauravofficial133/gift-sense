@@ -3,6 +3,7 @@ package handler
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -70,6 +71,14 @@ func (h *FeedbackHandler) TrackEvent(c *gin.Context) {
 	}
 
 	if err := h.service.TrackEvent(c.Request.Context(), evt); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "metadata") || strings.Contains(errMsg, "invalid event") {
+			c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+				Error:   "validation_error",
+				Message: errMsg,
+			})
+			return
+		}
 		log.Printf("analytics event error: %v", err)
 	}
 

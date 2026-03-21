@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -145,5 +146,64 @@ func TestTrackEvent_ShouldReturnError_WhenEventTypeIsInvalid(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid event type")
+	assert.Nil(t, store.savedEvent)
+}
+
+func TestTrackEvent_ShouldReturnError_WhenMetadataExceedsMaxKeys(t *testing.T) {
+	store := &mockFeedbackStore{}
+	svc := NewFeedbackService(store)
+
+	metadata := make(map[string]string)
+	for i := range 11 {
+		metadata[fmt.Sprintf("key_%d", i)] = "value"
+	}
+
+	evt := domain.AnalyticsEvent{
+		SessionID: "test-session",
+		EventType: "link_click",
+		Target:    "amazon",
+		Metadata:  metadata,
+	}
+
+	err := svc.TrackEvent(context.Background(), evt)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "metadata exceeds maximum of 10 keys")
+	assert.Nil(t, store.savedEvent)
+}
+
+func TestTrackEvent_ShouldReturnError_WhenMetadataKeyTooLong(t *testing.T) {
+	store := &mockFeedbackStore{}
+	svc := NewFeedbackService(store)
+
+	evt := domain.AnalyticsEvent{
+		SessionID: "test-session",
+		EventType: "link_click",
+		Target:    "amazon",
+		Metadata:  map[string]string{strings.Repeat("k", 51): "value"},
+	}
+
+	err := svc.TrackEvent(context.Background(), evt)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "metadata key exceeds maximum length of 50 characters")
+	assert.Nil(t, store.savedEvent)
+}
+
+func TestTrackEvent_ShouldReturnError_WhenMetadataValueTooLong(t *testing.T) {
+	store := &mockFeedbackStore{}
+	svc := NewFeedbackService(store)
+
+	evt := domain.AnalyticsEvent{
+		SessionID: "test-session",
+		EventType: "link_click",
+		Target:    "amazon",
+		Metadata:  map[string]string{"gift_name": strings.Repeat("v", 257)},
+	}
+
+	err := svc.TrackEvent(context.Background(), evt)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "metadata value exceeds maximum length of 256 characters")
 	assert.Nil(t, store.savedEvent)
 }

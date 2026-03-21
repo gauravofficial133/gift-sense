@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -66,7 +68,10 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 		Budget:   budget,
 	}
 
-	result, err := h.analyzer.Analyze(c.Request.Context(), req.SessionID, text, recipient)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
+	defer cancel()
+
+	result, err := h.analyzer.Analyze(ctx, req.SessionID, text, recipient)
 	if err != nil {
 		h.handleDomainError(c, err)
 		return

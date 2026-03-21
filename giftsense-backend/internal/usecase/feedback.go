@@ -36,6 +36,18 @@ func (s *FeedbackService) TrackEvent(ctx context.Context, evt domain.AnalyticsEv
 		return fmt.Errorf("invalid event type: %s", evt.EventType)
 	}
 
+	if len(evt.Metadata) > 10 {
+		return fmt.Errorf("metadata exceeds maximum of 10 keys")
+	}
+	for k, v := range evt.Metadata {
+		if len(k) > 50 {
+			return fmt.Errorf("metadata key exceeds maximum length of 50 characters")
+		}
+		if len(v) > 256 {
+			return fmt.Errorf("metadata value exceeds maximum length of 256 characters")
+		}
+	}
+
 	evt.Timestamp = time.Now()
 
 	return s.store.SaveEvent(ctx, evt)

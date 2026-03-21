@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type Config struct {
 	ChunkOverlapSize     int
 	Port                 string
 	AllowedOrigins       []string
+	RateLimitPerMinute   int
 	DatabaseURL          string
 }
 
@@ -76,6 +78,12 @@ func loadOptionals(cfg *Config) {
 	cfg.ChunkOverlapSize = getEnvInt("CHUNK_OVERLAP_SIZE", 3)
 	cfg.Port = getEnvString("PORT", "8080")
 	cfg.AllowedOrigins = parseOrigins(getEnvString("ALLOWED_ORIGINS", "http://localhost:5173"))
+	for _, o := range cfg.AllowedOrigins {
+		if o == "*" {
+			log.Fatal("ALLOWED_ORIGINS must not contain wildcard '*'")
+		}
+	}
+	cfg.RateLimitPerMinute = getEnvInt("RATE_LIMIT_PER_MINUTE", 5)
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 }
 
