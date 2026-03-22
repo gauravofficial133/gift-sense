@@ -1,7 +1,7 @@
 services:
   # ── Backend ─────────────────────────────────────────────────────────────────
   - type: web
-    name: giftsense-backend
+    name: upahaar-backend
     runtime: go
     rootDir: giftsense-backend
     buildCommand: go build -o server ./cmd/server
@@ -14,7 +14,7 @@ services:
       - key: PINECONE_ENVIRONMENT
         sync: false
       - key: PINECONE_INDEX_NAME
-        value: giftsense
+        value: upahaar
       - key: CHAT_MODEL
         value: gpt-4o
       - key: EMBEDDING_MODEL
@@ -40,11 +40,11 @@ services:
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   - type: web
-    name: giftsense-frontend
+    name: upahaar-frontend
     runtime: static
     rootDir: giftsense-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false   # Set to your giftsense-backend Render URL after deploy
+        sync: false   # Set to your upahaar-backend Render URL after deploy

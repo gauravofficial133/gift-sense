@@ -41,7 +41,7 @@ export default function UploadZone({ onFile, onError }) {
   return (
     <div
       className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors
-        ${dragging ? 'border-purple-500 bg-purple-50' : 'border-gray-300 hover:border-purple-400'}`}
+        ${dragging ? 'border-orange-500 bg-orange-50' : 'border-gray-300 hover:border-orange-400'}`}
       onClick={() => inputRef.current?.click()}
       onDragOver={e => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
@@ -58,7 +58,7 @@ export default function UploadZone({ onFile, onError }) {
       />
       {selectedName ? (
         <div className="flex flex-col items-center gap-2">
-          <FileText className="w-8 h-8 text-purple-500" />
+          <FileText className="w-8 h-8 text-orange-500" />
           <p className="text-sm font-medium text-gray-700 break-all">{selectedName}</p>
           <p className="text-xs text-gray-400">Tap to change file</p>
         </div>

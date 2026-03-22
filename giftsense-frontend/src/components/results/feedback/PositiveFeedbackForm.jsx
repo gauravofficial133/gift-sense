@@ -37,8 +37,8 @@ export default function PositiveFeedbackForm({ onSubmit }) {
             onClick={() => setPurchaseIntent(opt.value)}
             className={`rounded-full px-4 py-2 text-sm font-medium border transition-colors
               ${purchaseIntent === opt.value
-                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300'
+                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-orange-300'
               }`}
           >
             {opt.label}
@@ -56,13 +56,13 @@ export default function PositiveFeedbackForm({ onSubmit }) {
         rows={2}
         maxLength={500}
         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700
-          resize-none focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400"
+          resize-none focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
       />
 
       <button
         onClick={handleSubmit}
-        className="mt-3 w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium
-          text-white hover:bg-purple-700 active:bg-purple-800 transition-colors"
+        className="mt-3 w-full rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-medium
+          text-white hover:bg-orange-700 active:bg-orange-800 transition-colors"
       >
         Send feedback
       </button>

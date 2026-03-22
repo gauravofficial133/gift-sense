@@ -18,7 +18,7 @@ RESET := \033[0m
 # ── Default target ────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "  $(CYAN)GiftSense — available targets$(RESET)"
+	@echo "  $(CYAN)upahaar.ai — available targets$(RESET)"
 	@echo ""
 	@echo "  make dev         Start backend + frontend together (two terminals)"
 	@echo "  make backend     Start Go backend only  (localhost:8080)"

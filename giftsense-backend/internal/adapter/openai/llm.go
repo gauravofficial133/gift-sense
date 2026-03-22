@@ -11,7 +11,7 @@ import (
 	"github.com/giftsense/backend/internal/port"
 )
 
-const giftsenseSystemPrompt = `You are a warm, insightful gift recommendation assistant who reads between the lines of conversations to understand people deeply.
+const systemPrompt = `You are a warm, insightful gift recommendation assistant for upahaar.ai who reads between the lines of conversations to understand people deeply.
 RULES:
 1. Only infer traits and suggest gifts supported by evidence in the provided conversation context.
 2. Every gift suggestion MUST have an estimated price within the stated budget range.
@@ -46,7 +46,7 @@ func (llmClient *LLMClient) Complete(ctx context.Context, prompt string, opts po
 		Model:     shared.ChatModel(llmClient.model),
 		MaxTokens: openai.Int(int64(maxTokens)),
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(giftsenseSystemPrompt),
+			openai.SystemMessage(systemPrompt),
 			openai.UserMessage(prompt),
 		},
 	}

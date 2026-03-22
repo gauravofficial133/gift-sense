@@ -71,7 +71,7 @@ func loadOptionals(cfg *Config) {
 	cfg.MaxTokens = getEnvInt("MAX_TOKENS", 1000)
 	cfg.TopK = getEnvInt("TOP_K", 3)
 	cfg.NumRetrievalQueries = getEnvInt("NUM_RETRIEVAL_QUERIES", 4)
-	cfg.PineconeIndexName = getEnvString("PINECONE_INDEX_NAME", "giftsense")
+	cfg.PineconeIndexName = getEnvString("PINECONE_INDEX_NAME", "upahaar")
 	cfg.MaxFileSizeBytes = int64(getEnvInt("MAX_FILE_SIZE_BYTES", 2097152))
 	cfg.MaxProcessedMessages = getEnvInt("MAX_PROCESSED_MESSAGES", 400)
 	cfg.ChunkWindowSize = getEnvInt("CHUNK_WINDOW_SIZE", 8)

@@ -84,7 +84,7 @@ func main() {
 	}
 
 	addr := ":" + cfg.Port
-	log.Printf("GiftSense backend listening on %s", addr)
+	log.Printf("upahaar.ai backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("server: %v", err)
 	}

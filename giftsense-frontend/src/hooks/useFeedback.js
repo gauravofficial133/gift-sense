@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { submitFeedback } from '../api/giftsense'
+import { submitFeedback } from '../api/upahaar'
 
 /**
  * State machine for the feedback widget lifecycle.

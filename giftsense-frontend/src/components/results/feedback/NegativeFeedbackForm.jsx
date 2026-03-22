@@ -48,14 +48,14 @@ export default function NegativeFeedbackForm({ onSubmit }) {
               className={`flex items-center gap-3 min-h-[44px] rounded-lg border px-3 py-2
                 text-left text-sm transition-colors
                 ${isSelected
-                  ? 'border-purple-500 bg-purple-50 text-purple-700'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300'
+                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-orange-300'
                 }`}
             >
               <span
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border
                   ${isSelected
-                    ? 'border-purple-500 bg-purple-500 text-white'
+                    ? 'border-orange-500 bg-orange-500 text-white'
                     : 'border-gray-300 bg-white'
                   }`}
               >
@@ -77,13 +77,13 @@ export default function NegativeFeedbackForm({ onSubmit }) {
         rows={2}
         maxLength={500}
         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700
-          resize-none focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400"
+          resize-none focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
       />
 
       <button
         onClick={handleSubmit}
-        className="mt-3 w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium
-          text-white hover:bg-purple-700 active:bg-purple-800 transition-colors"
+        className="mt-3 w-full rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-medium
+          text-white hover:bg-orange-700 active:bg-orange-800 transition-colors"
       >
         Send feedback
       </button>

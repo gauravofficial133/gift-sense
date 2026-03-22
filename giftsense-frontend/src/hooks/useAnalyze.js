@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { analyzeConversation } from '../api/giftsense'
+import { analyzeConversation } from '../api/upahaar'
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2 MB
 

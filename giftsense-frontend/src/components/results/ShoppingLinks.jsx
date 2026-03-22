@@ -1,5 +1,5 @@
 import { ShoppingCart, ExternalLink } from 'lucide-react'
-import { trackEvent } from '../../api/giftsense'
+import { trackEvent } from '../../api/upahaar'
 
 const STORES = [
   { key: 'amazon',          label: 'Amazon' },
@@ -32,7 +32,7 @@ export default function ShoppingLinks({ links, sessionId, giftName }) {
           rel="noopener noreferrer"
           onClick={() => handleClick(store.key)}
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white
-            px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-purple-400 hover:text-purple-700
+            px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-orange-400 hover:text-orange-700
             transition-colors"
         >
           <ShoppingCart className="w-3 h-3" />

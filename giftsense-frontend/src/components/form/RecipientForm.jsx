@@ -4,14 +4,14 @@ function Field({ label, id, required, children }) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium text-gray-700">
-        {label}{required && <span className="text-purple-500 ml-0.5">*</span>}
+        {label}{required && <span className="text-orange-500 ml-0.5">*</span>}
       </label>
       {children}
     </div>
   )
 }
 
-const inputCls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-400'
+const inputCls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400'
 
 export default function RecipientForm({ values, onChange }) {
   function set(key) {

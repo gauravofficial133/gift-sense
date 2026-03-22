@@ -35,7 +35,7 @@ func TestLoad_ShouldApplyDefaults_WhenOptionalEnvVarsAreAbsent(t *testing.T) {
 	assert.Equal(t, 1000, cfg.MaxTokens)
 	assert.Equal(t, 3, cfg.TopK)
 	assert.Equal(t, 4, cfg.NumRetrievalQueries)
-	assert.Equal(t, "giftsense", cfg.PineconeIndexName)
+	assert.Equal(t, "upahaar", cfg.PineconeIndexName)
 	assert.Equal(t, int64(2097152), cfg.MaxFileSizeBytes)
 	assert.Equal(t, 400, cfg.MaxProcessedMessages)
 	assert.Equal(t, 8, cfg.ChunkWindowSize)

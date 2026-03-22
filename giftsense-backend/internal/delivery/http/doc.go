@@ -1,2 +1,2 @@
-// Package handler provides the HTTP delivery layer for GiftSense.
+// Package handler provides the HTTP delivery layer for upahaar.ai.
 package handler

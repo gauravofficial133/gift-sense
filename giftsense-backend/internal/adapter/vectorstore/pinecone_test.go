@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewPineconeStore_ShouldReturnError_WhenAPIKeyIsEmpty(t *testing.T) {
-	_, err := vectorstore.NewPineconeStore("", "giftsense", "us-east-1", 1536)
+	_, err := vectorstore.NewPineconeStore("", "upahaar", "us-east-1", 1536)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "API key")
 }
@@ -21,7 +21,7 @@ func TestNewPineconeStore_ShouldReturnError_WhenIndexNameIsEmpty(t *testing.T) {
 }
 
 func TestNewPineconeStore_ShouldReturnError_WhenEnvironmentIsEmpty(t *testing.T) {
-	_, err := vectorstore.NewPineconeStore("test-key", "giftsense", "", 1536)
+	_, err := vectorstore.NewPineconeStore("test-key", "upahaar", "", 1536)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "environment")
 }

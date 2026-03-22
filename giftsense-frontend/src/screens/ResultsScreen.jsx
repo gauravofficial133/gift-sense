@@ -7,17 +7,17 @@ export default function ResultsScreen({ result, onReset, sessionId, budgetTier }
   const { personality_insights = [], gift_suggestions = [] } = result ?? {}
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white px-4 py-8 sm:px-6 md:py-12">
+    <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white px-4 py-8 sm:px-6 md:py-12">
       <div className="mx-auto max-w-lg">
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Gift className="w-5 h-5 text-purple-600" />
-            <h1 className="text-lg font-bold text-gray-900">GiftSense</h1>
+            <Gift className="w-5 h-5 text-orange-600" />
+            <h1 className="text-lg font-bold text-gray-900">upahaar.ai</h1>
           </div>
           <button
             onClick={onReset}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5
-              text-xs font-medium text-gray-600 hover:border-purple-400 hover:text-purple-700 transition-colors"
+              text-xs font-medium text-gray-600 hover:border-orange-400 hover:text-orange-700 transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
             Start over

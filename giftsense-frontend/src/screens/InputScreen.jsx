@@ -23,13 +23,13 @@ export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
   const displayError = fileError || error
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white px-4 py-8 sm:px-6 md:py-12">
+    <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white px-4 py-8 sm:px-6 md:py-12">
       <div className="mx-auto max-w-lg">
         <header className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-100 mb-3">
-            <Gift className="w-6 h-6 text-purple-600" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-100 mb-3">
+            <Gift className="w-6 h-6 text-orange-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">GiftSense</h1>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">upahaar.ai</h1>
           <p className="mt-1 text-sm text-gray-500">
             Find the perfect gift by understanding who they really are
           </p>
@@ -55,8 +55,8 @@ export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-purple-600 py-3 text-sm font-semibold text-white
-              hover:bg-purple-700 active:bg-purple-800 transition-colors
+            className="w-full rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white
+              hover:bg-orange-700 active:bg-orange-800 transition-colors
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Find gift ideas →
