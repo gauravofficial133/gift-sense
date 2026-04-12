@@ -25,8 +25,10 @@ type Config struct {
 	ChunkOverlapSize     int
 	Port                 string
 	AllowedOrigins       []string
-	RateLimitPerMinute   int
-	DatabaseURL          string
+	RateLimitPerMinute    int
+	DatabaseURL           string
+	SarvamAPIKey          string
+	AudioMaxFileSizeBytes int64
 }
 
 func (c *Config) HasDatabase() bool {
@@ -85,6 +87,8 @@ func loadOptionals(cfg *Config) {
 	}
 	cfg.RateLimitPerMinute = getEnvInt("RATE_LIMIT_PER_MINUTE", 5)
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
+	cfg.SarvamAPIKey = os.Getenv("SARVAM_API_KEY")
+	cfg.AudioMaxFileSizeBytes = int64(getEnvInt("AUDIO_MAX_FILE_SIZE_BYTES", 5242880))
 }
 
 func getEnvString(key, defaultVal string) string {

@@ -1,23 +1,40 @@
 import { useState } from 'react'
 import { Gift } from 'lucide-react'
 import UploadZone from '../components/upload/UploadZone'
+import AudioUploadZone from '../components/upload/AudioUploadZone'
 import RecipientForm from '../components/form/RecipientForm'
 import PrivacyNotice from '../components/shared/PrivacyNotice'
 import ErrorMessage from '../components/shared/ErrorMessage'
 
 const INITIAL_FORM = { name: '', relation: '', gender: '', occasion: '', budgetTier: 'MID_RANGE' }
 
-export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
+export default function InputScreen({ onSubmit, onAudioSubmit, error, onErrorDismiss }) {
+  const [activeTab, setActiveTab] = useState('text') // 'text' | 'audio'
   const [file, setFile] = useState(null)
+  const [audioFile, setAudioFile] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
   const [fileError, setFileError] = useState(null)
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!file) { setFileError('Please upload your WhatsApp chat export.'); return }
-    if (!form.name.trim()) return
-    if (!form.occasion.trim()) return
-    onSubmit({ file, ...form })
+    if (activeTab === 'text') {
+      if (!file) { setFileError('Please upload your WhatsApp chat export.'); return }
+      if (!form.name.trim()) return
+      if (!form.occasion.trim()) return
+      onSubmit({ file, ...form })
+    } else {
+      if (!audioFile) { setFileError('Please upload an audio file.'); return }
+      if (!form.name.trim()) return
+      if (!form.occasion.trim()) return
+      onAudioSubmit({ file: audioFile, ...form })
+    }
+  }
+
+  function handleTabChange(tab) {
+    setActiveTab(tab)
+    setFile(null)
+    setAudioFile(null)
+    setFileError(null)
   }
 
   const displayError = fileError || error
@@ -36,12 +53,49 @@ export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
         </header>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+
           <section>
             <h2 className="text-base font-semibold text-gray-800 mb-3">1. Upload the conversation</h2>
-            <UploadZone
-              onFile={f => { setFile(f); setFileError(null) }}
-              onError={setFileError}
-            />
+
+            {/* Tab bar */}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-3 text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => handleTabChange('text')}
+                className={[
+                  'flex-1 py-2 transition-colors',
+                  activeTab === 'text'
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                Text export
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTabChange('audio')}
+                className={[
+                  'flex-1 py-2 transition-colors',
+                  activeTab === 'audio'
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                Audio file
+              </button>
+            </div>
+
+            {activeTab === 'text' ? (
+              <UploadZone
+                onFile={f => { setFile(f); setFileError(null) }}
+                onError={setFileError}
+              />
+            ) : (
+              <AudioUploadZone
+                onFile={f => { setAudioFile(f); setFileError(null) }}
+                error={null}
+              />
+            )}
           </section>
 
           <section>
@@ -49,7 +103,7 @@ export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
             <RecipientForm values={form} onChange={setForm} />
           </section>
 
-          <PrivacyNotice />
+          <PrivacyNotice inputMode={activeTab} />
 
           <ErrorMessage message={displayError} onDismiss={() => { setFileError(null); onErrorDismiss?.() }} />
 
@@ -59,7 +113,7 @@ export default function InputScreen({ onSubmit, error, onErrorDismiss }) {
               hover:bg-orange-700 active:bg-orange-800 transition-colors
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Find gift ideas →
+            {activeTab === 'audio' ? 'Transcribe & find gifts →' : 'Find gift ideas →'}
           </button>
         </form>
       </div>

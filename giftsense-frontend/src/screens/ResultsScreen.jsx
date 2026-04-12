@@ -2,8 +2,9 @@ import { RotateCcw, Gift } from 'lucide-react'
 import InsightCard from '../components/results/InsightCard'
 import GiftCard from '../components/results/GiftCard'
 import FeedbackWidget from '../components/results/FeedbackWidget'
+import SongEmotionSummary from '../components/results/SongEmotionSummary'
 
-export default function ResultsScreen({ result, onReset, sessionId, budgetTier }) {
+export default function ResultsScreen({ result, onReset, sessionId, budgetTier, audioAnalysis }) {
   const { personality_insights = [], gift_suggestions = [] } = result ?? {}
 
   return (
@@ -23,6 +24,8 @@ export default function ResultsScreen({ result, onReset, sessionId, budgetTier }
             Start over
           </button>
         </header>
+
+        <SongEmotionSummary audioAnalysis={audioAnalysis} />
 
         {personality_insights.length > 0 && (
           <section className="mb-6">

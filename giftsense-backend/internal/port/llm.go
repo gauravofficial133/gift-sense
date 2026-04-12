@@ -3,8 +3,9 @@ package port
 import "context"
 
 type CompletionOptions struct {
-	MaxTokens int
-	JSONMode  bool
+	MaxTokens    int
+	JSONMode     bool
+	SystemPrompt string // non-empty overrides the adapter's default system prompt
 }
 
 type LLMClient interface {

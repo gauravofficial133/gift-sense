@@ -4,20 +4,27 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"github.com/giftsense/backend/config"
 	"github.com/giftsense/backend/internal/adapter/feedbackstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
 	"github.com/giftsense/backend/internal/adapter/ratelimiter"
+	sarvamAdapter "github.com/giftsense/backend/internal/adapter/sarvam"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
 	"github.com/giftsense/backend/internal/database"
 	"github.com/giftsense/backend/internal/database/migration"
 	handler "github.com/giftsense/backend/internal/delivery/http"
+	"github.com/giftsense/backend/internal/port"
 	"github.com/giftsense/backend/internal/usecase"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables")
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -48,6 +55,15 @@ func main() {
 
 	analyzeHandler := handler.NewAnalyzeHandler(analyzer, cfg.MaxFileSizeBytes)
 
+	var transcriber port.Transcriber
+	if cfg.SarvamAPIKey != "" {
+		transcriber = sarvamAdapter.NewTranscriber(cfg.SarvamAPIKey)
+		log.Println("Sarvam transcription enabled")
+	} else {
+		log.Println("Sarvam transcription disabled (SARVAM_API_KEY not set)")
+	}
+	audioHandler := handler.NewAudioHandler(analyzer, transcriber, cfg.AudioMaxFileSizeBytes)
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(handler.CORS(cfg.AllowedOrigins))
@@ -56,6 +72,12 @@ func main() {
 	router.GET("/health", handler.Health)
 
 	v1 := router.Group("/api/v1")
+
+	// Audio routes use a separate 5MB size limiter.
+	audioRoutes := v1.Group("/")
+	audioRoutes.Use(handler.RequestSizeLimiter(cfg.AudioMaxFileSizeBytes))
+	audioRoutes.POST("/analyze-audio", audioHandler.AnalyzeAudio)
+	audioRoutes.POST("/analyze-from-transcript", audioHandler.AnalyzeFromTranscript)
 
 	if cfg.HasDatabase() {
 		db, dbErr := database.Connect(cfg.DatabaseURL)

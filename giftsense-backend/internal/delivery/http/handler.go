@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -96,9 +97,17 @@ func (h *AnalyzeHandler) handleDomainError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Error: "invalid_file_type", Message: err.Error()})
 	case errors.Is(err, domain.ErrConversationTooShort):
 		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Error: "conversation_too_short", Message: err.Error()})
+	case errors.Is(err, domain.ErrRetrievalFailed):
+		log.Printf("analyze handler: retrieval failed: %v", err)
+		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Error: "retrieval_failed", Message: "Not enough relevant content found. Try a longer conversation file."})
+	case errors.Is(err, domain.ErrAllSuggestionsFiltered):
+		log.Printf("analyze handler: all suggestions filtered: %v", err)
+		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Error: "suggestions_filtered", Message: "Could not find gift ideas within the selected budget. Try a different budget range."})
 	case errors.Is(err, domain.ErrLLMResponseInvalid):
+		log.Printf("analyze handler: LLM response invalid: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "llm_error", Message: "Analysis failed, please try again"})
 	default:
+		log.Printf("analyze handler: unexpected error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "internal_error", Message: "An unexpected error occurred"})
 	}
 }

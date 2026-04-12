@@ -42,11 +42,16 @@ func (llmClient *LLMClient) Complete(ctx context.Context, prompt string, opts po
 		maxTokens = opts.MaxTokens
 	}
 
+	activeSystemPrompt := systemPrompt
+	if opts.SystemPrompt != "" {
+		activeSystemPrompt = opts.SystemPrompt
+	}
+
 	params := openai.ChatCompletionNewParams{
 		Model:     shared.ChatModel(llmClient.model),
 		MaxTokens: openai.Int(int64(maxTokens)),
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(systemPrompt),
+			openai.SystemMessage(activeSystemPrompt),
 			openai.UserMessage(prompt),
 		},
 	}

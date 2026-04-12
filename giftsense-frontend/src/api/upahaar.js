@@ -34,6 +34,64 @@ export async function analyzeConversation({ sessionId, file, name, relation, gen
 }
 
 /**
+ * Posts an audio file and recipient form data to the analyze-audio endpoint.
+ *
+ * @param {FormData} formData - Must contain: session_id, audio (File), name, occasion, budget_tier
+ * @returns {Promise<object>} Response containing audio_analysis and optionally data
+ */
+export async function analyzeAudio(formData) {
+  const res = await fetch(`${API_URL}/api/v1/analyze-audio`, { method: 'POST', body: formData })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Request failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
+ * Posts a confirmed transcript (and optional emotions) to get gift results.
+ * Used as step 2 in the song and unknown audio flows.
+ *
+ * @param {object} params
+ * @param {string}   params.sessionId
+ * @param {string}   params.transcript
+ * @param {string}   params.name
+ * @param {string}   [params.relation]
+ * @param {string}   [params.gender]
+ * @param {string}   params.occasion
+ * @param {string}   params.budgetTier
+ * @param {Array}    [params.confirmedEmotions]
+ * @returns {Promise<import('./types').AnalyzeResponse>}
+ */
+export async function analyzeFromTranscript({ sessionId, transcript, name, relation, gender, occasion, budgetTier, confirmedEmotions }) {
+  const body = {
+    session_id: sessionId,
+    transcript,
+    name,
+    relation: relation || '',
+    gender: gender || '',
+    occasion,
+    budget_tier: budgetTier,
+    confirmed_emotions: confirmedEmotions || [],
+  }
+
+  const res = await fetch(`${API_URL}/api/v1/analyze-from-transcript`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Request failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
  * Submits user feedback to the backend.
  *
  * @param {object} payload

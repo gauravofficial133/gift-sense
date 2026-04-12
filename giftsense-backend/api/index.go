@@ -12,10 +12,12 @@ import (
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
 	"github.com/giftsense/backend/internal/adapter/ratelimiter"
+	sarvamAdapter "github.com/giftsense/backend/internal/adapter/sarvam"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
 	"github.com/giftsense/backend/internal/database"
 	"github.com/giftsense/backend/internal/database/migration"
 	deliveryhttp "github.com/giftsense/backend/internal/delivery/http"
+	"github.com/giftsense/backend/internal/port"
 	"github.com/giftsense/backend/internal/usecase"
 )
 
@@ -71,6 +73,15 @@ func buildRouter() (*gin.Engine, error) {
 
 	analyzeHandler := deliveryhttp.NewAnalyzeHandler(analyzer, cfg.MaxFileSizeBytes)
 
+	var transcriber port.Transcriber
+	if cfg.SarvamAPIKey != "" {
+		transcriber = sarvamAdapter.NewTranscriber(cfg.SarvamAPIKey)
+		log.Println("Sarvam transcription enabled")
+	} else {
+		log.Println("Sarvam transcription disabled (SARVAM_API_KEY not set)")
+	}
+	audioHandler := deliveryhttp.NewAudioHandler(analyzer, transcriber, cfg.AudioMaxFileSizeBytes)
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(deliveryhttp.CORS(cfg.AllowedOrigins))
@@ -78,6 +89,12 @@ func buildRouter() (*gin.Engine, error) {
 
 	r.GET("/health", deliveryhttp.Health)
 	v1 := r.Group("/api/v1")
+
+	// Audio routes use a separate 5MB size limiter (larger than global 2MB).
+	audioRoutes := v1.Group("/")
+	audioRoutes.Use(deliveryhttp.RequestSizeLimiter(cfg.AudioMaxFileSizeBytes))
+	audioRoutes.POST("/analyze-audio", audioHandler.AnalyzeAudio)
+	audioRoutes.POST("/analyze-from-transcript", audioHandler.AnalyzeFromTranscript)
 
 	if cfg.HasDatabase() {
 		db, dbErr := database.Connect(cfg.DatabaseURL)
