@@ -2,10 +2,11 @@ package dto
 
 import "github.com/giftsense/backend/internal/domain"
 
-// AnalyzeResponse is the successful 200 body for POST /api/v1/analyze.
+// AnalyzeResponse is the successful 200 body for POST /api/v1/analyze and POST /api/v1/analyze-from-transcript.
 type AnalyzeResponse struct {
-	Data    domain.AnalysisResult `json:"data"`
-	Message string                `json:"message"`
+	Data          domain.AnalysisResult `json:"data"`
+	Message       string                `json:"message"`
+	AudioAnalysis *AudioAnalysisDTO     `json:"audio_analysis,omitempty"`
 }
 
 // ErrorResponse is returned for all 4xx/5xx responses.

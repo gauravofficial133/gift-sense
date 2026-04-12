@@ -11,6 +11,36 @@ import (
 	"github.com/giftsense/backend/internal/domain"
 )
 
+var allowedAudioExtensions = map[string]bool{
+	".mp3":  true,
+	".wav":  true,
+	".ogg":  true,
+	".opus": true,
+	".m4a":  true,
+}
+
+// ValidateAudioFile checks extension and size, then returns the raw bytes.
+func ValidateAudioFile(fh *multipart.FileHeader, maxBytes int64) ([]byte, error) {
+	ext := strings.ToLower(filepath.Ext(fh.Filename))
+	if !allowedAudioExtensions[ext] {
+		return nil, domain.ErrAudioInvalidFormat
+	}
+	if fh.Size > maxBytes {
+		return nil, domain.ErrAudioFileTooLarge
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open audio file: %w", err)
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read audio file: %w", err)
+	}
+	return data, nil
+}
+
 // ValidateConversationFile checks extension, size, and reads content.
 func ValidateConversationFile(fh *multipart.FileHeader, maxBytes int64) (string, error) {
 	if strings.ToLower(filepath.Ext(fh.Filename)) != ".txt" {

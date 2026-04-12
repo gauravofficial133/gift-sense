@@ -104,11 +104,11 @@ func BuildAnalysisPrompt(chunks []domain.Chunk, recipient domain.RecipientDetail
 	if recipient.Budget.MaxINR > 0 {
 		budgetDesc = fmt.Sprintf("₹%d–₹%d", recipient.Budget.MinINR, recipient.Budget.MaxINR)
 	}
-	sb.WriteString(fmt.Sprintf("Find gift ideas for %s", recipient.Name))
+	fmt.Fprintf(&sb, "Find gift ideas for %s", recipient.Name)
 	if recipient.Relation != "" {
-		sb.WriteString(fmt.Sprintf(" (%s)", recipient.Relation))
+		fmt.Fprintf(&sb, " (%s)", recipient.Relation)
 	}
-	sb.WriteString(fmt.Sprintf(", occasion: %s, budget: %s (%s).\n\n", recipient.Occasion, recipient.Budget.Tier, budgetDesc))
+	fmt.Fprintf(&sb, ", occasion: %s, budget: %s (%s).\n\n", recipient.Occasion, recipient.Budget.Tier, budgetDesc)
 	sb.WriteString("Conversation excerpts:\n\n")
 	for _, c := range chunks {
 		sb.WriteString("---\n")
@@ -117,6 +117,56 @@ func BuildAnalysisPrompt(chunks []domain.Chunk, recipient domain.RecipientDetail
 	}
 	sb.WriteString("\nSuggest 3-5 specific, thoughtful gifts. Each estimated_price_inr must be within the stated budget.")
 	return sb.String()
+}
+
+// AnalyzeFromTranscript runs the gift analysis pipeline starting from a prose transcript,
+// bypassing the WhatsApp parser. Used by the audio flow after transcription.
+func (a *Analyzer) AnalyzeFromTranscript(ctx context.Context, sessionID, transcript string, recipient domain.RecipientDetails, confirmedEmotions []domain.EmotionSignal) (domain.AnalysisResult, error) {
+	chunks := ChunkTranscript(sessionID, transcript, 200, 50)
+	if len(chunks) == 0 {
+		return domain.AnalysisResult{}, domain.ErrConversationTooShort
+	}
+
+	chunksByID, err := a.embedAndStore(ctx, sessionID, chunks)
+	if err != nil {
+		return domain.AnalysisResult{}, err
+	}
+	defer func() { _ = a.store.DeleteSession(context.Background(), sessionID) }()
+
+	queries := BuildRetrievalQueries(recipient, a.cfg.NumRetrievalQueries)
+	retrieved, err := RetrieveAndRerank(ctx, sessionID, queries, chunksByID, a.embedder, a.store, a.cfg.TopK)
+	if err != nil {
+		return domain.AnalysisResult{}, fmt.Errorf("retrieve: %w", err)
+	}
+	if len(retrieved) == 0 {
+		return domain.AnalysisResult{}, domain.ErrRetrievalFailed
+	}
+
+	prompt := BuildAnalysisPromptWithEmotions(retrieved, recipient, confirmedEmotions)
+	raw, err := a.llm.Complete(ctx, prompt, port.CompletionOptions{JSONMode: true})
+	if err != nil {
+		return domain.AnalysisResult{}, fmt.Errorf("llm complete: %w", err)
+	}
+	return parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+}
+
+// BuildAnalysisPromptWithEmotions builds the gift analysis prompt, optionally appending
+// song emotion context when the input came from a song.
+func BuildAnalysisPromptWithEmotions(chunks []domain.Chunk, recipient domain.RecipientDetails, emotions []domain.EmotionSignal) string {
+	base := BuildAnalysisPrompt(chunks, recipient)
+	if len(emotions) == 0 {
+		return base
+	}
+
+	var parts []string
+	for _, e := range emotions {
+		parts = append(parts, fmt.Sprintf("%s %s (%.1f)", e.Name, e.Emoji, e.Intensity))
+	}
+
+	return base + fmt.Sprintf(
+		"\n\nNote: These gift suggestions were inspired by a song the user chose for this person.\nThe song's emotional fingerprint: [%s].\nLet this emotional warmth inform your suggestions.",
+		strings.Join(parts, ", "),
+	)
 }
 
 func parseAndEnrichLLMResponse(raw string, budget domain.BudgetRange, linkGen LinkGeneratorFunc) (domain.AnalysisResult, error) {

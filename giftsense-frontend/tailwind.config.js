@@ -3,6 +3,10 @@ export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      colors: {
+        'recording-red': '#E53E3E',
+        'warning-amber': '#D69E2E',
+      },
       keyframes: {
         slideUp: {
           '0%': { transform: 'translateY(1rem)', opacity: '0' },
