@@ -120,6 +120,93 @@ export async function submitFeedback(payload) {
 }
 
 /**
+ * Searches Spotify tracks via backend proxy.
+ *
+ * @param {string} query - Search query
+ * @returns {Promise<{tracks: Array}>}
+ */
+export async function spotifySearch(query) {
+  const res = await fetch(`${API_URL}/api/v1/spotify/search?q=${encodeURIComponent(query)}`)
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Spotify search failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
+ * Analyzes a Spotify song's emotions (cached or fresh LLM call).
+ *
+ * @param {object} params
+ * @param {string} params.trackId
+ * @param {string} params.trackName
+ * @param {string} params.artist
+ * @returns {Promise<{emotions: Array, lyrics_snippet: string, language_label: string, cached: boolean}>}
+ */
+export async function spotifyAnalyzeSong({ trackId, trackName, artist }) {
+  const res = await fetch(`${API_URL}/api/v1/spotify/analyze-song`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      track_id: trackId,
+      track_name: trackName,
+      artist,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Song analysis failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
+ * Generates gift suggestions from confirmed song emotions (no RAG pipeline).
+ *
+ * @param {object} params
+ * @param {string} params.sessionId
+ * @param {string} params.trackName
+ * @param {string} params.artist
+ * @param {string} params.name
+ * @param {string} [params.relation]
+ * @param {string} [params.gender]
+ * @param {string} params.occasion
+ * @param {string} params.budgetTier
+ * @param {Array}  params.confirmedEmotions
+ * @returns {Promise<import('./types').AnalyzeResponse>}
+ */
+export async function analyzeFromSong({ sessionId, trackName, artist, name, relation, gender, occasion, budgetTier, confirmedEmotions }) {
+  const body = {
+    session_id: sessionId,
+    track_name: trackName,
+    artist,
+    name,
+    relation: relation || '',
+    gender: gender || '',
+    occasion,
+    budget_tier: budgetTier,
+    confirmed_emotions: confirmedEmotions || [],
+  }
+
+  const res = await fetch(`${API_URL}/api/v1/analyze-from-song`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Request failed' }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  return res.json()
+}
+
+/**
  * Tracks an analytics event (fire-and-forget). Never throws.
  *
  * @param {object} payload

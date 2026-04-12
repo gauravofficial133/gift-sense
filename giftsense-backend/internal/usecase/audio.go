@@ -145,3 +145,37 @@ func (a *Analyzer) ExtractSongEmotions(ctx context.Context, transcript, language
 
 	return resp.Emotions, resp.LyricsSnippet, resp.LanguageLabel, nil
 }
+
+// ExtractSongEmotionsFromSpotify calls GPT to extract emotional signals using
+// the song's name, artist, and Spotify audio features as context.
+func (a *Analyzer) ExtractSongEmotionsFromSpotify(ctx context.Context, trackName, artist string, features domain.SpotifyAudioFeatures) ([]domain.EmotionSignal, string, string, error) {
+	var userMsg string
+	// When audio features are all zero (e.g. the endpoint returned 403/deprecated),
+	// omit the numeric profile so the LLM doesn't treat 0-valence as "maximally sad".
+	if features.Valence == 0 && features.Energy == 0 && features.Danceability == 0 && features.Tempo == 0 {
+		userMsg = fmt.Sprintf(
+			"Song: \"%s\" by %s. Analyze the emotional essence of this song based on its title and artist.",
+			trackName, artist,
+		)
+	} else {
+		userMsg = fmt.Sprintf(
+			"Song: \"%s\" by %s.\nAudio profile: valence=%.2f (0=sad, 1=happy), energy=%.2f, danceability=%.2f, tempo=%.0f BPM.\nAnalyze the emotional essence of this song.",
+			trackName, artist, features.Valence, features.Energy, features.Danceability, features.Tempo,
+		)
+	}
+
+	raw, err := a.llm.Complete(ctx, userMsg, port.CompletionOptions{
+		JSONMode:     true,
+		SystemPrompt: emotionSystemPrompt,
+	})
+	if err != nil {
+		return nil, "", "", fmt.Errorf("extract spotify song emotions: %w", err)
+	}
+
+	var resp emotionResponse
+	if err = json.Unmarshal([]byte(raw), &resp); err != nil {
+		return nil, "", "", fmt.Errorf("parse spotify emotion response: %w", err)
+	}
+
+	return resp.Emotions, resp.LyricsSnippet, resp.LanguageLabel, nil
+}

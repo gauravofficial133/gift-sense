@@ -40,6 +40,23 @@ type RateLimitModel struct {
 
 func (RateLimitModel) TableName() string { return "rate_limits" }
 
+type SongEmotionModel struct {
+	ID             uint    `gorm:"primaryKey"`
+	SpotifyTrackID string  `gorm:"type:varchar(50);uniqueIndex;not null"`
+	TrackName      string  `gorm:"type:varchar(255);not null"`
+	Artist         string  `gorm:"type:varchar(255);not null"`
+	Emotions       string  `gorm:"type:jsonb;not null"`
+	LyricsSnippet  string  `gorm:"type:varchar(200)"`
+	LanguageLabel  string  `gorm:"type:varchar(50)"`
+	Valence        float64 `gorm:"type:decimal(4,3)"`
+	Energy         float64 `gorm:"type:decimal(4,3)"`
+	Danceability   float64 `gorm:"type:decimal(4,3)"`
+	Tempo          float64 `gorm:"type:decimal(6,2)"`
+	CreatedAt      time.Time `gorm:"autoCreateTime"`
+}
+
+func (SongEmotionModel) TableName() string { return "song_emotions" }
+
 func RunMigrations(db *gorm.DB) error {
-	return db.AutoMigrate(&FeedbackModel{}, &AnalyticsEventModel{}, &RateLimitModel{})
+	return db.AutoMigrate(&FeedbackModel{}, &AnalyticsEventModel{}, &RateLimitModel{}, &SongEmotionModel{})
 }

@@ -169,6 +169,46 @@ func BuildAnalysisPromptWithEmotions(chunks []domain.Chunk, recipient domain.Rec
 	)
 }
 
+// AnalyzeFromSongEmotions generates gift suggestions based on a Spotify song's emotions
+// and recipient details. This skips the RAG pipeline entirely since there is no
+// conversation text — the LLM prompt is built directly from the song context.
+func (a *Analyzer) AnalyzeFromSongEmotions(ctx context.Context, recipient domain.RecipientDetails, songName, artist string, emotions []domain.EmotionSignal) (domain.AnalysisResult, error) {
+	prompt := buildSongGiftPrompt(recipient, songName, artist, emotions)
+	raw, err := a.llm.Complete(ctx, prompt, port.CompletionOptions{JSONMode: true})
+	if err != nil {
+		return domain.AnalysisResult{}, fmt.Errorf("llm complete (song): %w", err)
+	}
+	return parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+}
+
+func buildSongGiftPrompt(recipient domain.RecipientDetails, songName, artist string, emotions []domain.EmotionSignal) string {
+	var sb strings.Builder
+
+	budgetDesc := fmt.Sprintf("₹%d+", recipient.Budget.MinINR)
+	if recipient.Budget.MaxINR > 0 {
+		budgetDesc = fmt.Sprintf("₹%d–₹%d", recipient.Budget.MinINR, recipient.Budget.MaxINR)
+	}
+
+	fmt.Fprintf(&sb, "Find gift ideas for %s", recipient.Name)
+	if recipient.Relation != "" {
+		fmt.Fprintf(&sb, " (%s)", recipient.Relation)
+	}
+	fmt.Fprintf(&sb, ", occasion: %s, budget: %s (%s).\n\n", recipient.Occasion, recipient.Budget.Tier, budgetDesc)
+
+	fmt.Fprintf(&sb, "The user has dedicated the song \"%s\" by %s to express their feelings for this person.\n", songName, artist)
+
+	if len(emotions) > 0 {
+		var parts []string
+		for _, e := range emotions {
+			parts = append(parts, fmt.Sprintf("%s %s (%.1f)", e.Name, e.Emoji, e.Intensity))
+		}
+		fmt.Fprintf(&sb, "The song's emotional fingerprint: [%s].\n", strings.Join(parts, ", "))
+	}
+
+	sb.WriteString("\nSuggest 3-5 specific, thoughtful gifts that resonate with the emotions this song conveys. Each estimated_price_inr must be within the stated budget.")
+	return sb.String()
+}
+
 func parseAndEnrichLLMResponse(raw string, budget domain.BudgetRange, linkGen LinkGeneratorFunc) (domain.AnalysisResult, error) {
 	var resp llmResponse
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {

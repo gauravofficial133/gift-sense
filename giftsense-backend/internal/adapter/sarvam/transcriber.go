@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -17,13 +19,21 @@ import (
 
 const (
 	sarvamBatchBaseURL = "https://api.sarvam.ai/speech-to-text/job/v1"
+	sarvamSyncURL      = "https://api.sarvam.ai/speech-to-text"
 	pollInterval       = 3 * time.Second
+	// syncMaxBytes is the threshold below which the fast synchronous API is used.
+	// Files above this size fall back to the batch job pipeline.
+	// ~25 MB covers roughly 25 minutes of compressed audio at 128 kbps.
+	syncMaxBytes = 25 * 1024 * 1024
 )
 
-// Transcriber uses the Sarvam batch STT API to transcribe audio up to 1 hour.
+// Transcriber uses the Sarvam STT APIs.
+// Short audio (≤ syncMaxBytes) uses the synchronous endpoint (2–5 s round-trip).
+// Longer audio falls back to the batch job pipeline.
 type Transcriber struct {
 	apiKey     string
-	baseURL    string
+	baseURL    string // batch base URL
+	syncURL    string // synchronous endpoint
 	httpClient *http.Client
 }
 
@@ -31,6 +41,7 @@ func NewTranscriber(apiKey string) *Transcriber {
 	return &Transcriber{
 		apiKey:  apiKey,
 		baseURL: sarvamBatchBaseURL,
+		syncURL: sarvamSyncURL,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
@@ -40,6 +51,12 @@ func NewTranscriber(apiKey string) *Transcriber {
 // WithBaseURL overrides the batch API base URL. Used in tests.
 func (t *Transcriber) WithBaseURL(url string) *Transcriber {
 	t.baseURL = url
+	return t
+}
+
+// WithSyncURL overrides the synchronous API URL. Used in tests.
+func (t *Transcriber) WithSyncURL(url string) *Transcriber {
+	t.syncURL = url
 	return t
 }
 
@@ -117,7 +134,126 @@ type sttSegment struct {
 
 // ── main entry point ─────────────────────────────────────────────────────────
 
+// errDurationExceeded is a sentinel used internally to signal that the sync
+// API rejected the file for exceeding the 30-second duration limit.
+type errDurationExceeded struct{ body string }
+
+func (e errDurationExceeded) Error() string {
+	return "sync API: audio duration exceeds 30 s limit"
+}
+
+// Transcribe transcribes audio. Files ≤ syncMaxBytes try the fast synchronous
+// endpoint first; if the sync API rejects the file for exceeding the 30-second
+// duration limit (or the file is larger than syncMaxBytes), the batch job
+// pipeline is used automatically.
 func (t *Transcriber) Transcribe(ctx context.Context, req port.TranscribeRequest) (port.TranscribeResult, error) {
+	if len(req.Data) <= syncMaxBytes {
+		result, err := t.transcribeSync(ctx, req)
+		if err == nil {
+			return result, nil
+		}
+		var durErr errDurationExceeded
+		if !isErrDurationExceeded(err, &durErr) {
+			return port.TranscribeResult{}, err
+		}
+		// Audio is short in bytes but long in duration — fall through to batch.
+	}
+	return t.transcribeBatch(ctx, req)
+}
+
+// isErrDurationExceeded unwraps err to find an errDurationExceeded value.
+func isErrDurationExceeded(err error, target *errDurationExceeded) bool {
+	var e errDurationExceeded
+	if errors.As(err, &e) {
+		if target != nil {
+			*target = e
+		}
+		return true
+	}
+	// Also check the raw error string so the test/mock path works without
+	// wrapping through fmt.Errorf("%w", errDurationExceeded{}).
+	return strings.Contains(err.Error(), "Audio duration exceeds the maximum limit")
+}
+
+// transcribeSync calls the synchronous Sarvam STT endpoint (POST /speech-to-text).
+// Returns in 2–5 seconds for short clips.
+func (t *Transcriber) transcribeSync(ctx context.Context, req port.TranscribeRequest) (port.TranscribeResult, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fw, err := mw.CreateFormFile("file", req.Filename)
+	if err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: create form file: %s", domain.ErrTranscriptionFailed, err)
+	}
+	if _, err = fw.Write(req.Data); err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: write audio data: %s", domain.ErrTranscriptionFailed, err)
+	}
+
+	lc := req.LanguageCode
+	if lc == "" {
+		lc = "unknown"
+	}
+	if err = mw.WriteField("language_code", lc); err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: write language_code: %s", domain.ErrTranscriptionFailed, err)
+	}
+	if err = mw.WriteField("model", "saarika:v2.5"); err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: write model: %s", domain.ErrTranscriptionFailed, err)
+	}
+	mw.Close()
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.syncURL, &buf)
+	if err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: create sync request: %s", domain.ErrTranscriptionFailed, err)
+	}
+	httpReq.Header.Set("Content-Type", mw.FormDataContentType())
+	httpReq.Header.Set("api-subscription-key", t.apiKey)
+
+	resp, err := t.httpClient.Do(httpReq)
+	if err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: sync request: %s", domain.ErrTranscriptionFailed, err)
+	}
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: read sync response: %s", domain.ErrTranscriptionFailed, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body := string(b)
+		if resp.StatusCode == http.StatusBadRequest && strings.Contains(body, "Audio duration exceeds the maximum limit") {
+			return port.TranscribeResult{}, errDurationExceeded{body: body}
+		}
+		return port.TranscribeResult{}, fmt.Errorf("%w: sync API returned %d: %s", domain.ErrTranscriptionFailed, resp.StatusCode, body)
+	}
+
+	var result transcriptJSON
+	if err = json.Unmarshal(b, &result); err != nil {
+		return port.TranscribeResult{}, fmt.Errorf("%w: invalid sync transcript JSON", domain.ErrTranscriptionFailed)
+	}
+
+	transcript := result.Transcript
+	if transcript == "" && len(result.Segments) > 0 {
+		parts := make([]string, 0, len(result.Segments))
+		for _, s := range result.Segments {
+			if s.Text != "" {
+				parts = append(parts, s.Text)
+			}
+		}
+		transcript = strings.Join(parts, " ")
+	}
+	if transcript == "" {
+		return port.TranscribeResult{}, domain.ErrTranscriptionFailed
+	}
+
+	return port.TranscribeResult{
+		Transcript:   transcript,
+		LanguageCode: result.LanguageCode,
+	}, nil
+}
+
+// transcribeBatch runs the full async Sarvam batch job pipeline.
+// Use for large files (> syncMaxBytes) where the sync endpoint may time out.
+func (t *Transcriber) transcribeBatch(ctx context.Context, req port.TranscribeRequest) (port.TranscribeResult, error) {
 	jobID, err := t.initiateJob(ctx, req.LanguageCode)
 	if err != nil {
 		return port.TranscribeResult{}, fmt.Errorf("%w: initiate: %s", domain.ErrTranscriptionFailed, err)

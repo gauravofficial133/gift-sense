@@ -29,10 +29,16 @@ type Config struct {
 	DatabaseURL           string
 	SarvamAPIKey          string
 	AudioMaxFileSizeBytes int64
+	SpotifyClientID       string
+	SpotifyClientSecret   string
 }
 
 func (c *Config) HasDatabase() bool {
 	return c.DatabaseURL != ""
+}
+
+func (c *Config) HasSpotify() bool {
+	return c.SpotifyClientID != "" && c.SpotifyClientSecret != ""
 }
 
 func Load() (*Config, error) {
@@ -89,6 +95,8 @@ func loadOptionals(cfg *Config) {
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.SarvamAPIKey = os.Getenv("SARVAM_API_KEY")
 	cfg.AudioMaxFileSizeBytes = int64(getEnvInt("AUDIO_MAX_FILE_SIZE_BYTES", 5242880))
+	cfg.SpotifyClientID = os.Getenv("SPOTIFY_CLIENT_ID")
+	cfg.SpotifyClientSecret = os.Getenv("SPOTIFY_CLIENT_SECRET")
 }
 
 func getEnvString(key, defaultVal string) string {

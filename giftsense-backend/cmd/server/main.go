@@ -12,6 +12,8 @@ import (
 	openaiAdapter "github.com/giftsense/backend/internal/adapter/openai"
 	"github.com/giftsense/backend/internal/adapter/ratelimiter"
 	sarvamAdapter "github.com/giftsense/backend/internal/adapter/sarvam"
+	"github.com/giftsense/backend/internal/adapter/songcache"
+	spotifyAdapter "github.com/giftsense/backend/internal/adapter/spotify"
 	"github.com/giftsense/backend/internal/adapter/vectorstore"
 	"github.com/giftsense/backend/internal/database"
 	"github.com/giftsense/backend/internal/database/migration"
@@ -64,6 +66,14 @@ func main() {
 	}
 	audioHandler := handler.NewAudioHandler(analyzer, transcriber, cfg.AudioMaxFileSizeBytes)
 
+	var spotifyClient port.SpotifyClient
+	if cfg.HasSpotify() {
+		spotifyClient = spotifyAdapter.NewClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret)
+		log.Println("Spotify integration enabled")
+	} else {
+		log.Println("Spotify integration disabled (SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET not set)")
+	}
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(handler.CORS(cfg.AllowedOrigins))
@@ -79,6 +89,7 @@ func main() {
 	audioRoutes.POST("/analyze-audio", audioHandler.AnalyzeAudio)
 	audioRoutes.POST("/analyze-from-transcript", audioHandler.AnalyzeFromTranscript)
 
+	var songCache port.SongEmotionCache
 	if cfg.HasDatabase() {
 		db, dbErr := database.Connect(cfg.DatabaseURL)
 		if dbErr != nil {
@@ -99,11 +110,22 @@ func main() {
 		v1.POST("/feedback", fbHandler.SubmitFeedback)
 		v1.POST("/events", fbHandler.TrackEvent)
 
+		if cfg.HasSpotify() {
+			songCache = songcache.NewGormSongCache(db)
+			log.Println("Spotify song emotion cache enabled (DATABASE_URL + SPOTIFY configured)")
+		}
+
 		log.Println("Feedback + rate limiting enabled (DATABASE_URL configured)")
 	} else {
 		v1.POST("/analyze", analyzeHandler.Analyze)
 		log.Println("Feedback + rate limiting disabled (DATABASE_URL not set)")
 	}
+
+	spotifyHandler := handler.NewSpotifyHandler(spotifyClient, songCache, analyzer)
+	v1.GET("/spotify/search", spotifyHandler.Search)
+	v1.GET("/spotify/track/:id/features", spotifyHandler.GetAudioFeatures)
+	v1.POST("/spotify/analyze-song", spotifyHandler.AnalyzeSong)
+	v1.POST("/analyze-from-song", spotifyHandler.AnalyzeFromSong)
 
 	addr := ":" + cfg.Port
 	log.Printf("upahaar.ai backend listening on %s", addr)

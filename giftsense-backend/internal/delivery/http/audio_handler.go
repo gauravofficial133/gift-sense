@@ -76,8 +76,9 @@ func (h *AudioHandler) AnalyzeAudio(c *gin.Context) {
 		return
 	}
 
-	// 3-minute context: up to 120s for Sarvam batch job + 30s for GPT classify.
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
+	// 6-minute context: Sarvam batch jobs routinely take 3-4 min (upload to Azure + process + poll).
+	// Remaining time covers GPT classify + RAG pipeline if audio is a conversation.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 360*time.Second)
 	defer cancel()
 
 	transcribeResult, err := h.transcriber.Transcribe(ctx, port.TranscribeRequest{
