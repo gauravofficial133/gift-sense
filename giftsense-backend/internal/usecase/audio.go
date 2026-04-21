@@ -11,6 +11,10 @@ import (
 	"github.com/giftsense/backend/internal/port"
 )
 
+func init() {
+	emotionSystemPrompt = buildEmotionSystemPrompt()
+}
+
 const classifySystemPrompt = `You are an audio content classifier. Analyze the provided transcript and classify it.
 RULES:
 1. Respond ONLY with valid JSON: {"input_type": "SONG"|"CONVERSATION"|"MONOLOGUE"|"UNKNOWN", "confidence": 0.0-1.0}
@@ -20,14 +24,18 @@ RULES:
 5. UNKNOWN: under 10 words, unintelligible noise, no discernible speech
 6. When uncertain between CONVERSATION and MONOLOGUE, prefer MONOLOGUE`
 
-const emotionSystemPrompt = `You are a music emotion analyst. Extract the emotional essence of song lyrics.
+var emotionSystemPrompt string
+
+func buildEmotionSystemPrompt() string {
+	return `You are a music emotion analyst. Extract the emotional essence of song lyrics.
 RULES:
 1. Respond ONLY with valid JSON: {"emotions": [{"name": "string", "emoji": "string", "intensity": 0.0-1.0}], "lyrics_snippet": "string", "language_label": "string"}
-2. emotions: max 5 items. Choose names from: Deep Love, Heartbreak, Longing, Joy, Nostalgia, Passion, Melancholy, Hope, Devotion, Playfulness, Yearning, Tenderness, Celebration, Grief, Warmth
+2. emotions: max 5 items. Choose names ONLY from: ` + strings.Join(EmotionVocabulary, ", ") + `
 3. intensity: 0.0 = barely present, 1.0 = overwhelmingly dominant
 4. lyrics_snippet: single representative line/phrase, max 80 characters
 5. language_label: human-readable (e.g. "Hindi", "English", "Tamil")
 6. If no lyrics detectable: {"emotions": [], "lyrics_snippet": "", "language_label": "Unknown"}`
+}
 
 var sentenceSplitter = regexp.MustCompile(`[.!?]+\s+`)
 

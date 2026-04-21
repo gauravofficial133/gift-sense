@@ -22,4 +22,5 @@ type GiftSuggestion struct {
 type AnalysisResult struct {
 	PersonalityInsights []PersonalityInsight `json:"personality_insights"`
 	GiftSuggestions     []GiftSuggestion     `json:"gift_suggestions"`
+	Card                *CardRender          `json:"card,omitempty"`
 }

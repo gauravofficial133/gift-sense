@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/giftsense/backend/internal/domain"
 	"github.com/giftsense/backend/internal/port"
@@ -26,10 +29,11 @@ type Analyzer struct {
 	store    port.VectorStore
 	linkGen  LinkGeneratorFunc
 	cfg      AnalyzerConfig
+	cardGen  *CardGenerator
 }
 
 func NewAnalyzer(embedder port.Embedder, llm port.LLMClient, store port.VectorStore, linkGen LinkGeneratorFunc, cfg AnalyzerConfig) *Analyzer {
-	return &Analyzer{embedder: embedder, llm: llm, store: store, linkGen: linkGen, cfg: cfg}
+	return &Analyzer{embedder: embedder, llm: llm, store: store, linkGen: linkGen, cfg: cfg, cardGen: NewCardGenerator(llm)}
 }
 
 type llmResponse struct {
@@ -71,12 +75,44 @@ func (a *Analyzer) Analyze(ctx context.Context, sessionID, conversationText stri
 	if len(retrieved) == 0 {
 		return domain.AnalysisResult{}, domain.ErrRetrievalFailed
 	}
-	prompt := BuildAnalysisPrompt(retrieved, recipient)
-	raw, err := a.llm.Complete(ctx, prompt, port.CompletionOptions{JSONMode: true})
-	if err != nil {
-		return domain.AnalysisResult{}, fmt.Errorf("llm complete: %w", err)
+
+	var (
+		result   domain.AnalysisResult
+		emotions []domain.EmotionSignal
+	)
+	eg, egCtx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		ctx10, cancel := context.WithTimeout(egCtx, 10*time.Second)
+		defer cancel()
+		var extractErr error
+		emotions, extractErr = a.ExtractChatEmotions(ctx10, retrieved, recipient)
+		if extractErr != nil {
+			emotions = []domain.EmotionSignal{{Name: "Warmth", Emoji: "🤗", Intensity: 0.7}}
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		prompt := BuildAnalysisPrompt(retrieved, recipient)
+		raw, llmErr := a.llm.Complete(egCtx, prompt, port.CompletionOptions{JSONMode: true})
+		if llmErr != nil {
+			return fmt.Errorf("llm complete: %w", llmErr)
+		}
+		var parseErr error
+		result, parseErr = parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+		return parseErr
+	})
+
+	if err := eg.Wait(); err != nil {
+		return domain.AnalysisResult{}, err
 	}
-	return parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+
+	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
+	if cardErr == nil {
+		result.Card = &card
+	}
+	return result, nil
 }
 
 func (a *Analyzer) embedAndStore(ctx context.Context, sessionID string, chunks []domain.Chunk) (map[string]domain.Chunk, error) {
@@ -147,7 +183,15 @@ func (a *Analyzer) AnalyzeFromTranscript(ctx context.Context, sessionID, transcr
 	if err != nil {
 		return domain.AnalysisResult{}, fmt.Errorf("llm complete: %w", err)
 	}
-	return parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+	result, err := parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+	if err != nil {
+		return domain.AnalysisResult{}, err
+	}
+	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, confirmedEmotions)
+	if cardErr == nil {
+		result.Card = &card
+	}
+	return result, nil
 }
 
 // BuildAnalysisPromptWithEmotions builds the gift analysis prompt, optionally appending
@@ -178,7 +222,15 @@ func (a *Analyzer) AnalyzeFromSongEmotions(ctx context.Context, recipient domain
 	if err != nil {
 		return domain.AnalysisResult{}, fmt.Errorf("llm complete (song): %w", err)
 	}
-	return parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+	result, err := parseAndEnrichLLMResponse(raw, recipient.Budget, a.linkGen)
+	if err != nil {
+		return domain.AnalysisResult{}, err
+	}
+	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
+	if cardErr == nil {
+		result.Card = &card
+	}
+	return result, nil
 }
 
 func buildSongGiftPrompt(recipient domain.RecipientDetails, songName, artist string, emotions []domain.EmotionSignal) string {
