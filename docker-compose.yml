@@ -5,22 +5,26 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env
-    restart: unless-stopped
+      - ./giftsense-backend/.env
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 15s
 
   frontend:
     build:
       context: ./giftsense-frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+      dockerfile: Dockerfile.dev
     ports:
-      - "3000:80"
+      - "5173:5173"
+    volumes:
+      - ./giftsense-frontend/src:/app/src
+      - ./giftsense-frontend/public:/app/public
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:8080
     depends_on:
       backend:
         condition: service_healthy
-    restart: unless-stopped

@@ -76,6 +76,24 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]domain.
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		c.invalidateToken()
+		if err := c.ensureToken(ctx); err != nil {
+			return nil, fmt.Errorf("%w: %s", domain.ErrSpotifySearchFailed, err)
+		}
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", domain.ErrSpotifySearchFailed, err)
+		}
+		req2.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err = c.httpClient.Do(req2)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", domain.ErrSpotifySearchFailed, err)
+		}
+		defer resp.Body.Close()
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: read body: %s", domain.ErrSpotifySearchFailed, err)
@@ -132,6 +150,24 @@ func (c *Client) GetAudioFeatures(ctx context.Context, trackID string) (domain.S
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		c.invalidateToken()
+		if err := c.ensureToken(ctx); err != nil {
+			return domain.SpotifyAudioFeatures{}, fmt.Errorf("spotify audio features: %w", err)
+		}
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return domain.SpotifyAudioFeatures{}, fmt.Errorf("spotify audio features: %w", err)
+		}
+		req2.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err = c.httpClient.Do(req2)
+		if err != nil {
+			return domain.SpotifyAudioFeatures{}, fmt.Errorf("spotify audio features: %w", err)
+		}
+		defer resp.Body.Close()
+	}
+
 	// Gracefully degrade if the audio features endpoint is deprecated (403).
 	if resp.StatusCode == http.StatusForbidden {
 		log.Printf("spotify: audio features endpoint returned 403 (likely deprecated), returning zero values for track %s", trackID)
@@ -159,6 +195,13 @@ func (c *Client) GetAudioFeatures(ctx context.Context, trackID string) (domain.S
 		Danceability: featResp.Danceability,
 		Tempo:        featResp.Tempo,
 	}, nil
+}
+
+func (c *Client) invalidateToken() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = ""
+	c.tokenExpiry = time.Time{}
 }
 
 // ensureToken acquires or refreshes the Client Credentials token.

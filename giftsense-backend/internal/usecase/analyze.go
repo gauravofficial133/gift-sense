@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/giftsense/backend/internal/adapter/cardrender"
 	"github.com/giftsense/backend/internal/domain"
 	"github.com/giftsense/backend/internal/port"
 )
@@ -24,16 +25,21 @@ type AnalyzerConfig struct {
 type LinkGeneratorFunc func(name string, budget domain.BudgetRange) domain.ShoppingLinks
 
 type Analyzer struct {
-	embedder port.Embedder
-	llm      port.LLMClient
-	store    port.VectorStore
-	linkGen  LinkGeneratorFunc
-	cfg      AnalyzerConfig
-	cardGen  *CardGenerator
+	embedder     port.Embedder
+	llm          port.LLMClient
+	anthropicLLM port.LLMClient
+	store        port.VectorStore
+	linkGen      LinkGeneratorFunc
+	cfg          AnalyzerConfig
+	cardGen      *CardGenerator
 }
 
-func NewAnalyzer(embedder port.Embedder, llm port.LLMClient, store port.VectorStore, linkGen LinkGeneratorFunc, cfg AnalyzerConfig) *Analyzer {
-	return &Analyzer{embedder: embedder, llm: llm, store: store, linkGen: linkGen, cfg: cfg, cardGen: NewCardGenerator(llm)}
+func NewAnalyzer(embedder port.Embedder, llm port.LLMClient, store port.VectorStore, linkGen LinkGeneratorFunc, cfg AnalyzerConfig, renderer *cardrender.Renderer, engine *cardrender.TemplateEngine, anthropicLLM port.LLMClient, imageGen port.ImageGenerator, assetLib *AssetLibrary) *Analyzer {
+	return &Analyzer{embedder: embedder, llm: llm, anthropicLLM: anthropicLLM, store: store, linkGen: linkGen, cfg: cfg, cardGen: NewCardGenerator(llm, anthropicLLM, renderer, engine, imageGen, assetLib)}
+}
+
+func (a *Analyzer) SetTemplateStore(store port.TemplateStore, compiler *HTMLCompiler) {
+	a.cardGen.SetTemplateStore(store, compiler)
 }
 
 type llmResponse struct {
@@ -108,11 +114,61 @@ func (a *Analyzer) Analyze(ctx context.Context, sessionID, conversationText stri
 		return domain.AnalysisResult{}, err
 	}
 
-	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
-	if cardErr == nil {
-		result.Card = &card
+	dataFields := ExtractDataFields(messages, recipient)
+	result.DataFields = dataFields
+	result.Cards = a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
+	for _, card := range result.Cards {
+		card.DataFields = dataFields
 	}
 	return result, nil
+}
+
+func ExtractDataFields(messages []domain.Message, recipient domain.RecipientDetails) map[string]string {
+	fields := map[string]string{
+		"recipient_name": recipient.Name,
+		"occasion":       recipient.Occasion,
+	}
+	if len(messages) > 0 {
+		fields["message_count"] = fmt.Sprintf("%d", len(messages))
+	}
+
+	emojiCounts := make(map[string]int)
+	for _, m := range messages {
+		for _, r := range m.Text {
+			if isEmoji(r) {
+				emojiCounts[string(r)]++
+			}
+		}
+	}
+	if len(emojiCounts) > 0 {
+		topEmoji := ""
+		topCount := 0
+		for e, c := range emojiCounts {
+			if c > topCount {
+				topEmoji = e
+				topCount = c
+			}
+		}
+		fields["top_emoji"] = topEmoji
+	}
+
+	return fields
+}
+
+func isEmoji(r rune) bool {
+	return (r >= 0x1F600 && r <= 0x1F64F) ||
+		(r >= 0x1F300 && r <= 0x1F5FF) ||
+		(r >= 0x1F680 && r <= 0x1F6FF) ||
+		(r >= 0x1F900 && r <= 0x1F9FF) ||
+		(r >= 0x2600 && r <= 0x26FF) ||
+		(r >= 0x2700 && r <= 0x27BF) ||
+		(r >= 0xFE00 && r <= 0xFE0F) ||
+		(r >= 0x1FA00 && r <= 0x1FA6F) ||
+		(r >= 0x1FA70 && r <= 0x1FAFF) ||
+		(r >= 0x2702 && r <= 0x27B0) ||
+		r == 0x200D || r == 0xFE0F ||
+		(r >= 0x1F1E0 && r <= 0x1F1FF) ||
+		r == 0x2764 || r == 0x2763
 }
 
 func (a *Analyzer) embedAndStore(ctx context.Context, sessionID string, chunks []domain.Chunk) (map[string]domain.Chunk, error) {
@@ -187,9 +243,14 @@ func (a *Analyzer) AnalyzeFromTranscript(ctx context.Context, sessionID, transcr
 	if err != nil {
 		return domain.AnalysisResult{}, err
 	}
-	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, confirmedEmotions)
-	if cardErr == nil {
-		result.Card = &card
+	dataFields := map[string]string{
+		"recipient_name": recipient.Name,
+		"occasion":       recipient.Occasion,
+	}
+	result.DataFields = dataFields
+	result.Cards = a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, confirmedEmotions)
+	for _, card := range result.Cards {
+		card.DataFields = dataFields
 	}
 	return result, nil
 }
@@ -226,9 +287,16 @@ func (a *Analyzer) AnalyzeFromSongEmotions(ctx context.Context, recipient domain
 	if err != nil {
 		return domain.AnalysisResult{}, err
 	}
-	card, cardErr := a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
-	if cardErr == nil {
-		result.Card = &card
+	dataFields := map[string]string{
+		"recipient_name": recipient.Name,
+		"occasion":       recipient.Occasion,
+		"song_name":      songName,
+		"artist_name":    artist,
+	}
+	result.DataFields = dataFields
+	result.Cards = a.cardGen.Generate(ctx, recipient, result.PersonalityInsights, emotions)
+	for _, card := range result.Cards {
+		card.DataFields = dataFields
 	}
 	return result, nil
 }

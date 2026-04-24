@@ -69,7 +69,7 @@ func buildRouter() (*gin.Engine, error) {
 		ChunkOverlapSize:     cfg.ChunkOverlapSize,
 		TopK:                 cfg.TopK,
 		NumRetrievalQueries:  cfg.NumRetrievalQueries,
-	})
+	}, nil, nil, nil, nil, nil)
 
 	analyzeHandler := deliveryhttp.NewAnalyzeHandler(analyzer, cfg.MaxFileSizeBytes)
 
@@ -83,6 +83,7 @@ func buildRouter() (*gin.Engine, error) {
 	audioHandler := deliveryhttp.NewAudioHandler(analyzer, transcriber, cfg.AudioMaxFileSizeBytes)
 
 	r := gin.New()
+	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(deliveryhttp.CORS(cfg.AllowedOrigins))
 	r.Use(deliveryhttp.RequestSizeLimiter(cfg.MaxFileSizeBytes))

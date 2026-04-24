@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import { Gift } from 'lucide-react'
@@ -9,6 +10,10 @@ import InputStep from './components/steps/InputStep'
 import RecipientStep from './components/steps/RecipientStep'
 import EmotionStep from './components/steps/EmotionStep'
 import ResultsStep from './components/steps/ResultsStep'
+import AdminLayout from './admin/AdminLayout'
+import TemplateListPage from './admin/templates/TemplateListPage'
+import TemplateEditorPage from './admin/templates/TemplateEditorPage'
+import AssetPage from './admin/AssetPage'
 import {
   analyzeConversation,
   analyzeAudio,
@@ -38,11 +43,6 @@ function WizardContent() {
     setAudioSubState,
     analysisState,
   } = useStepper()
-
-  // ── Trigger analysis when stepping to the right point ──────────────────
-
-  // Path A (text): step 2 = Results → trigger on step transition
-  // Path B (audio): step 2 = Emotions → trigger emotion fetch, then step 3 = Results → trigger gift analysis
 
   const triggerTextAnalysis = useCallback(async () => {
     setAnalysisState('loading')
@@ -94,10 +94,8 @@ function WizardContent() {
         setAudioSubState('transcript_confirm')
         setAnalysisState('idle')
       } else {
-        // CONVERSATION or MONOLOGUE — results ready
         setResult(data.data)
         setAnalysisState('success')
-        // Skip emotion step, go to results
         goToStep(3)
       }
     } catch (err) {
@@ -172,8 +170,6 @@ function WizardContent() {
     }
   }, [sessionId, formData, audioAnalysis, songEmotions, setAnalysisState, setResult, setError])
 
-  // ── Step transition effects ─────────────────────────────────────────────
-
   useEffect(() => {
     if (currentPath === 'text' && currentStep === 2 && analysisState === 'idle') {
       triggerTextAnalysis()
@@ -200,11 +196,8 @@ function WizardContent() {
     }
   }, [currentPath, currentStep, analysisState, formData.inputMode, triggerSongGiftAnalysis, triggerVoiceNoteGiftAnalysis])
 
-  // ── Render current step ─────────────────────────────────────────────────
-
   function renderStep() {
     if (!currentPath) {
-      // Step 0 before path selection
       return <InputStep />
     }
 
@@ -217,7 +210,6 @@ function WizardContent() {
       }
     }
 
-    // audio path
     switch (currentStep) {
       case 0: return <InputStep />
       case 1: return <RecipientStep />
@@ -231,7 +223,6 @@ function WizardContent() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <header className="border-b border-gray-100 px-4 py-3 sm:px-6">
         <div className="mx-auto max-w-xl flex items-center gap-2">
           <Gift className="w-5 h-5 text-orange-500" />
@@ -239,12 +230,10 @@ function WizardContent() {
         </div>
       </header>
 
-      {/* Progress bar */}
       {showProgress && (
         <ProgressBar currentStep={currentStep} stepLabels={stepLabels} />
       )}
 
-      {/* Step content */}
       <main className="mx-auto max-w-xl px-4 py-6 sm:px-6 sm:py-8">
         <StepTransition step={currentStep} direction={direction}>
           {renderStep()}
@@ -254,12 +243,27 @@ function WizardContent() {
   )
 }
 
-export default function App() {
+function WizardApp() {
   return (
     <StepperProvider>
       <WizardContent />
+    </StepperProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route path="templates" element={<TemplateListPage />} />
+          <Route path="templates/:id/edit" element={<TemplateEditorPage />} />
+          <Route path="assets" element={<AssetPage />} />
+        </Route>
+        <Route path="/*" element={<WizardApp />} />
+      </Routes>
       <Analytics />
       <SpeedInsights />
-    </StepperProvider>
+    </BrowserRouter>
   )
 }

@@ -92,7 +92,7 @@ func enoughConversation() string {
 
 func TestAnalyze_ShouldReturnResult_WhenValidConversationProvided(t *testing.T) {
 	store := vectorstore.NewMemoryStore()
-	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig())
+	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig(), nil, nil, nil, nil, nil)
 
 	result, err := analyzer.Analyze(context.Background(), "sess-1", enoughConversation(), defaultRecipient())
 
@@ -106,7 +106,7 @@ func TestAnalyze_ShouldReturnResult_WhenValidConversationProvided(t *testing.T) 
 
 func TestAnalyze_ShouldReturnError_WhenConversationTooShort(t *testing.T) {
 	store := vectorstore.NewMemoryStore()
-	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig())
+	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig(), nil, nil, nil, nil, nil)
 
 	_, err := analyzer.Analyze(context.Background(), "sess-2", "Alice: Hi\nBob: Hey", defaultRecipient())
 
@@ -116,7 +116,7 @@ func TestAnalyze_ShouldReturnError_WhenConversationTooShort(t *testing.T) {
 
 func TestAnalyze_ShouldReturnError_WhenLLMReturnsInvalidJSON(t *testing.T) {
 	store := vectorstore.NewMemoryStore()
-	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: "not json"}, store, noopLinkGen, defaultConfig())
+	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: "not json"}, store, noopLinkGen, defaultConfig(), nil, nil, nil, nil, nil)
 
 	_, err := analyzer.Analyze(context.Background(), "sess-3", enoughConversation(), defaultRecipient())
 
@@ -127,7 +127,7 @@ func TestAnalyze_ShouldReturnError_WhenLLMReturnsInvalidJSON(t *testing.T) {
 func TestAnalyze_ShouldReturnError_WhenLLMReturnsEmptySuggestions(t *testing.T) {
 	store := vectorstore.NewMemoryStore()
 	emptyJSON := `{"personality_insights":[],"gift_suggestions":[]}`
-	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: emptyJSON}, store, noopLinkGen, defaultConfig())
+	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: emptyJSON}, store, noopLinkGen, defaultConfig(), nil, nil, nil, nil, nil)
 
 	_, err := analyzer.Analyze(context.Background(), "sess-4", enoughConversation(), defaultRecipient())
 
@@ -137,7 +137,7 @@ func TestAnalyze_ShouldReturnError_WhenLLMReturnsEmptySuggestions(t *testing.T) 
 
 func TestAnalyze_ShouldDeleteSession_AfterAnalysis(t *testing.T) {
 	store := vectorstore.NewMemoryStore()
-	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig())
+	analyzer := usecase.NewAnalyzer(&fakeEmbedder{}, &fakeLLM{response: validLLMJSON()}, store, noopLinkGen, defaultConfig(), nil, nil, nil, nil, nil)
 
 	_, err := analyzer.Analyze(context.Background(), "sess-5", enoughConversation(), defaultRecipient())
 	require.NoError(t, err)

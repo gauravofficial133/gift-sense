@@ -4,7 +4,7 @@ import { downloadCardPDF } from '../../lib/cardDownload'
 export default function CardActions({ card, recipientName, onReset }) {
   function handleDownload() {
     if (!card?.pdf_base64) return
-    downloadCardPDF(card.pdf_base64, recipientName, card.theme_id)
+    downloadCardPDF(card.pdf_base64, recipientName, card.recipe_id)
   }
 
   return (

@@ -1,16 +1,15 @@
 import { useState } from 'react'
-import { Music, ChevronDown, ChevronUp } from 'lucide-react'
+import { Music, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
 import { useStepper } from '../stepper/StepperContext'
 import InsightCard from '../results/InsightCard'
 import GiftCard from '../results/GiftCard'
 import FeedbackWidget from '../results/FeedbackWidget'
-import CardHero from '../results/CardHero'
-import CardActions from '../results/CardActions'
+import CardGrid from '../results/CardGrid'
 import { ResultsSkeleton } from '../shared/SkeletonLoader'
 
 export default function ResultsStep() {
   const { result, analysisState, error, formData, sessionId, reset } = useStepper()
-  const { personality_insights = [], gift_suggestions = [], card } = result ?? {}
+  const { personality_insights = [], gift_suggestions = [], cards = [] } = result ?? {}
   const isSpotify = formData.inputMode === 'spotify'
   const trackName = isSpotify ? formData.spotifyTrack?.trackName : null
   const artist = isSpotify ? formData.spotifyTrack?.artist : null
@@ -63,13 +62,25 @@ export default function ResultsStep() {
         </div>
       )}
 
-      {card && (
+      {cards.length > 0 && (
         <section>
-          <CardHero card={card} />
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">Greeting cards</h3>
+          <p className="text-xs text-gray-400 mb-3">Tap a card to preview and download PDF</p>
+          <CardGrid cards={cards} recipientName={formData.name} />
         </section>
       )}
 
-      <CardActions card={card} recipientName={formData.name} onReset={reset} />
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={reset}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600
+            hover:border-gray-300 hover:text-gray-900 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Start over
+        </button>
+      </div>
 
       {personality_insights.length > 0 && (
         <section className="border border-gray-100 rounded-xl overflow-hidden">

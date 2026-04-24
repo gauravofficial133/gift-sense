@@ -69,7 +69,7 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 		Budget:   budget,
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 	defer cancel()
 
 	result, err := h.analyzer.Analyze(ctx, req.SessionID, text, recipient)

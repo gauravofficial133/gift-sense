@@ -2,106 +2,294 @@ package usecase
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"strings"
+	"log"
+	"sync"
+	"time"
 
+	"github.com/giftsense/backend/internal/adapter/cardrender"
 	"github.com/giftsense/backend/internal/domain"
 	"github.com/giftsense/backend/internal/port"
 )
 
 type CardGenerator struct {
-	llm port.LLMClient
+	openaiLLM    port.LLMClient
+	anthropicLLM port.LLMClient
+	renderer     *cardrender.Renderer
+	engine       *cardrender.TemplateEngine
+	imageGen     port.ImageGenerator
+	assetLib     *AssetLibrary
+	tplStore     port.TemplateStore
+	compiler     *HTMLCompiler
 }
 
-func NewCardGenerator(llm port.LLMClient) *CardGenerator {
-	return &CardGenerator{llm: llm}
+func NewCardGenerator(openaiLLM port.LLMClient, anthropicLLM port.LLMClient, renderer *cardrender.Renderer, engine *cardrender.TemplateEngine, imageGen port.ImageGenerator, assetLib *AssetLibrary) *CardGenerator {
+	return &CardGenerator{openaiLLM: openaiLLM, anthropicLLM: anthropicLLM, renderer: renderer, engine: engine, imageGen: imageGen, assetLib: assetLib}
 }
 
-type cardLLMResponse struct {
-	Body      string `json:"body"`
-	Closing   string `json:"closing"`
-	Signature string `json:"signature"`
+func (g *CardGenerator) SetTemplateStore(store port.TemplateStore, compiler *HTMLCompiler) {
+	g.tplStore = store
+	g.compiler = compiler
 }
 
-func (g *CardGenerator) Generate(ctx context.Context, recipient domain.RecipientDetails, insights []domain.PersonalityInsight, emotions []domain.EmotionSignal) (domain.CardRender, error) {
-	occKey := DetectOccasion(recipient.Occasion)
-	tmpl := GetOccasionTemplate(occKey)
-	group := DetectEmotionGroup(emotions)
-	palette := GetEmotionPalette(group)
-	headline := fmt.Sprintf(tmpl.Greeting, recipient.Name)
+type cardJob struct {
+	llm       port.LLMClient
+	model     string
+	variation string
+}
 
-	insightParts := make([]string, 0, 3)
-	for i, ins := range insights {
-		if i >= 3 {
-			break
+func (g *CardGenerator) Generate(ctx context.Context, recipient domain.RecipientDetails, insights []domain.PersonalityInsight, emotions []domain.EmotionSignal) []*domain.CardRender {
+	if g.renderer == nil {
+		return nil
+	}
+
+	jobs := g.buildJobs()
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	var templates []domain.TemplateDefinition
+	if g.tplStore != nil {
+		if tpls, err := g.tplStore.List(ctx); err == nil && len(tpls) > 0 {
+			templates = tpls
 		}
-		insightParts = append(insightParts, ins.Insight)
 	}
-	insightsSummary := strings.Join(insightParts, "; ")
 
-	emotionParts := make([]string, 0, len(emotions))
-	for _, e := range emotions {
-		emotionParts = append(emotionParts, fmt.Sprintf("%s (%.0f%%)", e.Name, e.Intensity*100))
+	if len(templates) == 0 {
+		log.Println("no templates available, skipping card generation")
+		return nil
 	}
-	emotionsSummary := strings.Join(emotionParts, ", ")
 
-	prompt := fmt.Sprintf(`You write the personal message inside a greeting card.
+	var (
+		mu    sync.Mutex
+		cards []*domain.CardRender
+		wg    sync.WaitGroup
+	)
 
-Occasion: %s
-Recipient: %s
-Detected emotional tone: %s
-Personality insights: %s
+	for _, job := range jobs {
+		wg.Add(1)
+		go func(j cardJob) {
+			defer wg.Done()
+			card, err := g.generateOne(ctx, j, recipient, insights, emotions, templates)
+			if err != nil {
+				log.Printf("card generation (%s/%s): %v", j.model, j.variation, err)
+				return
+			}
+			mu.Lock()
+			cards = append(cards, card)
+			mu.Unlock()
+		}(job)
+	}
 
-Write a warm, personal card message that matches the emotional tone above.
-If the tone is playful or humorous, be light and funny.
-If the tone is tender or loving, be heartfelt and sincere.
-If the tone is nostalgic or warm, be reflective and cozy.
+	wg.Wait()
+	return cards
+}
 
-Rules:
-- Body: 2-3 sentences, 240 characters max. No quotes from chats. Grounded in the insights.
-- Closing: 5 words max (e.g., "With all my heart", "Always yours").
-- Signature: short line like "With love," or "Yours always,".
-- ASCII and common punctuation only. No emoji.
+func (g *CardGenerator) buildJobs() []cardJob {
+	var jobs []cardJob
+	if g.openaiLLM != nil {
+		jobs = append(jobs,
+			cardJob{llm: g.openaiLLM, model: "openai", variation: "heartfelt and sincere"},
+			cardJob{llm: g.openaiLLM, model: "openai", variation: "playful and creative"},
+		)
+	}
+	if g.anthropicLLM != nil {
+		jobs = append(jobs,
+			cardJob{llm: g.anthropicLLM, model: "claude", variation: "elegant and poetic"},
+			cardJob{llm: g.anthropicLLM, model: "claude", variation: "warm and conversational"},
+		)
+	}
+	if len(jobs) == 0 && g.openaiLLM != nil {
+		jobs = append(jobs, cardJob{llm: g.openaiLLM, model: "openai", variation: "heartfelt and sincere"})
+	}
+	return jobs
+}
 
-Respond in JSON: {"body":"...","closing":"...","signature":"..."}`,
-		recipient.Occasion, recipient.Name, emotionsSummary, insightsSummary)
-
-	raw, err := g.llm.Complete(ctx, prompt, port.CompletionOptions{JSONMode: true})
+func (g *CardGenerator) generateOne(ctx context.Context, job cardJob, recipient domain.RecipientDetails, insights []domain.PersonalityInsight, emotions []domain.EmotionSignal, templates []domain.TemplateDefinition) (*domain.CardRender, error) {
+	dir, err := DirectArtWithTemplates(ctx, job.llm, recipient, insights, emotions, job.variation, templates)
 	if err != nil {
-		return domain.CardRender{}, fmt.Errorf("card generator: llm complete: %w", err)
+		return nil, fmt.Errorf("art direction: %w", err)
 	}
 
-	var resp cardLLMResponse
-	if parseErr := json.Unmarshal([]byte(raw), &resp); parseErr != nil {
-		return domain.CardRender{}, fmt.Errorf("card generator: parse response: %w", parseErr)
+	palette, ok := GetNamedPalette(dir.PaletteName)
+	if !ok {
+		group := DetectEmotionGroup(emotions)
+		palette = GetEmotionPalette(group)
 	}
 
+	occasionKey := string(DetectOccasion(recipient.Occasion))
 	content := domain.CardContent{
-		Headline:    headline,
-		Body:        resp.Body,
-		Closing:     resp.Closing,
-		Signature:   resp.Signature,
+		Headline:    dir.Headline,
+		Body:        dir.Body,
+		Closing:     dir.Closing,
+		Signature:   dir.Signature,
 		Recipient:   recipient.Name,
 		Emotions:    emotions,
-		OccasionKey: string(occKey),
+		OccasionKey: occasionKey,
 	}
 
-	svgStr, err := RenderSVG(tmpl.Motif, palette, content)
+	tplDef := g.findTemplate(dir.TemplateID, templates)
+	if tplDef == nil {
+		return nil, fmt.Errorf("template not found: %s", dir.TemplateID)
+	}
+
+	illustrations := make(map[string]string)
+	var illustration *domain.CardIllustration
+
+	if dir.GenerateIllustration && dir.IllustrationPrompt != "" && g.assetLib != nil {
+		slot := dir.IllustrationSlot
+		if slot == "" {
+			slot = "hero"
+		}
+		emotionNames := make([]string, len(emotions))
+		for i, e := range emotions {
+			emotionNames[i] = e.Name
+		}
+		imgBase64, imgErr := g.assetLib.GetOrGenerate(ctx, dir.IllustrationPrompt, occasionKey, emotionNames, slot, tplDef.Canvas.Width, tplDef.Canvas.Height)
+		if imgErr != nil {
+			log.Printf("illustration generation failed: %v", imgErr)
+		} else {
+			illustrations[slot] = imgBase64
+			illustration = &domain.CardIllustration{
+				PNGBase64: imgBase64,
+				Slot:      slot,
+				Prompt:    dir.IllustrationPrompt,
+			}
+		}
+	}
+
+	html, err := g.compiler.Compile(CompileInput{
+		Template:      *tplDef,
+		Palette:       palette,
+		Content:       content,
+		Illustrations: illustrations,
+		DataFields:    make(map[string]string),
+		Photos:        make(map[string]string),
+		FontChoices:   dir.FontChoices,
+		BackgroundIdx: dir.BackgroundChoice,
+		Seed:          time.Now().UnixNano(),
+	})
 	if err != nil {
-		return domain.CardRender{}, fmt.Errorf("card generator: %w", err)
+		return nil, fmt.Errorf("compile template: %w", err)
 	}
 
-	pdfBytes, err := RenderPDF(palette, content)
+	result, err := g.renderer.RenderPNG(html, tplDef.Canvas.Width, tplDef.Canvas.Height)
 	if err != nil {
-		return domain.CardRender{}, fmt.Errorf("card generator: %w", err)
+		return nil, fmt.Errorf("render: %w", err)
 	}
 
-	return domain.CardRender{
-		SVG:       svgStr,
-		PDFBase64: base64.StdEncoding.EncodeToString(pdfBytes),
-		ThemeID:   string(occKey),
-		Content:   content,
+	return &domain.CardRender{
+		PreviewPNG:   result,
+		RecipeID:     dir.TemplateID,
+		PaletteName:  dir.PaletteName,
+		Content:      content,
+		Model:        job.model,
+		Illustration: illustration,
 	}, nil
+}
+
+func (g *CardGenerator) findTemplate(id string, templates []domain.TemplateDefinition) *domain.TemplateDefinition {
+	for i := range templates {
+		if templates[i].ID == id {
+			return &templates[i]
+		}
+	}
+	return nil
+}
+
+func (g *CardGenerator) RenderPDF(ctx context.Context, card *domain.CardRender) (string, error) {
+	return g.renderPDFMultiPage(ctx, card, false)
+}
+
+func (g *CardGenerator) RenderMultiPagePDF(ctx context.Context, card *domain.CardRender) (string, error) {
+	return g.renderPDFMultiPage(ctx, card, true)
+}
+
+func (g *CardGenerator) renderPDFMultiPage(ctx context.Context, card *domain.CardRender, multiPage bool) (string, error) {
+	if g.renderer == nil || g.compiler == nil {
+		return "", fmt.Errorf("rendering not available")
+	}
+
+	palette, ok := GetNamedPalette(card.PaletteName)
+	if !ok {
+		group := DetectEmotionGroup(card.Content.Emotions)
+		palette = GetEmotionPalette(group)
+	}
+
+	illustrations := make(map[string]string)
+	if card.Illustration != nil && card.Illustration.PNGBase64 != "" {
+		illustrations[card.Illustration.Slot] = card.Illustration.PNGBase64
+	}
+
+	tplDef, err := g.tplStore.Get(ctx, card.RecipeID)
+	if err != nil {
+		return "", fmt.Errorf("template not found: %w", err)
+	}
+
+	frontHTML, err := g.compiler.Compile(CompileInput{
+		Template:      *tplDef,
+		Palette:       palette,
+		Content:       card.Content,
+		Illustrations: illustrations,
+		DataFields:    card.DataFields,
+		Photos:        card.Photos,
+		FontChoices:   make(map[string]string),
+		Seed:          time.Now().UnixNano(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("compile front: %w", err)
+	}
+
+	if !multiPage {
+		return g.renderer.RenderPrintPDF(frontHTML, tplDef.Canvas.Width, tplDef.Canvas.Height)
+	}
+
+	insideHTML, err := g.compiler.CompileInsidePage(CompileInput{
+		Template: *tplDef,
+		Palette:  palette,
+		Content:  card.Content,
+	})
+	if err != nil {
+		return "", fmt.Errorf("compile inside: %w", err)
+	}
+
+	return g.renderer.RenderMultiPagePDF(frontHTML, insideHTML, tplDef.Canvas.Width, tplDef.Canvas.Height)
+}
+
+func (g *CardGenerator) RenderPreview(ctx context.Context, card *domain.CardRender) (string, error) {
+	if g.renderer == nil || g.compiler == nil {
+		return "", fmt.Errorf("rendering not available")
+	}
+
+	palette, ok := GetNamedPalette(card.PaletteName)
+	if !ok {
+		group := DetectEmotionGroup(card.Content.Emotions)
+		palette = GetEmotionPalette(group)
+	}
+
+	illustrations := make(map[string]string)
+	if card.Illustration != nil && card.Illustration.PNGBase64 != "" {
+		illustrations[card.Illustration.Slot] = card.Illustration.PNGBase64
+	}
+
+	tplDef, err := g.tplStore.Get(ctx, card.RecipeID)
+	if err != nil {
+		return "", fmt.Errorf("template not found: %w", err)
+	}
+
+	html, err := g.compiler.Compile(CompileInput{
+		Template:      *tplDef,
+		Palette:       palette,
+		Content:       card.Content,
+		Illustrations: illustrations,
+		DataFields:    card.DataFields,
+		Photos:        card.Photos,
+		FontChoices:   make(map[string]string),
+		Seed:          time.Now().UnixNano(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("compile: %w", err)
+	}
+
+	return g.renderer.RenderPNG(html, tplDef.Canvas.Width, tplDef.Canvas.Height)
 }

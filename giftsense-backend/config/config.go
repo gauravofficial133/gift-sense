@@ -31,6 +31,9 @@ type Config struct {
 	AudioMaxFileSizeBytes int64
 	SpotifyClientID       string
 	SpotifyClientSecret   string
+	AnthropicAPIKey       string
+	AnthropicModel        string
+	OpenAIImageModel      string
 }
 
 func (c *Config) HasDatabase() bool {
@@ -39,6 +42,10 @@ func (c *Config) HasDatabase() bool {
 
 func (c *Config) HasSpotify() bool {
 	return c.SpotifyClientID != "" && c.SpotifyClientSecret != ""
+}
+
+func (c *Config) HasAnthropic() bool {
+	return c.AnthropicAPIKey != ""
 }
 
 func Load() (*Config, error) {
@@ -97,6 +104,9 @@ func loadOptionals(cfg *Config) {
 	cfg.AudioMaxFileSizeBytes = int64(getEnvInt("AUDIO_MAX_FILE_SIZE_BYTES", 5242880))
 	cfg.SpotifyClientID = os.Getenv("SPOTIFY_CLIENT_ID")
 	cfg.SpotifyClientSecret = os.Getenv("SPOTIFY_CLIENT_SECRET")
+	cfg.AnthropicAPIKey = os.Getenv("ANTHROPIC_API_KEY")
+	cfg.AnthropicModel = getEnvString("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+	cfg.OpenAIImageModel = os.Getenv("OPENAI_IMAGE_MODEL")
 }
 
 func getEnvString(key, defaultVal string) string {
