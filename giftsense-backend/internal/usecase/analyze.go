@@ -120,6 +120,15 @@ func (a *Analyzer) Analyze(ctx context.Context, sessionID, conversationText stri
 	for _, card := range result.Cards {
 		card.DataFields = dataFields
 	}
+
+	if len(retrieved) > 0 && a.llm != nil {
+		memCard := a.cardGen.GenerateMemoryCard(ctx, a.llm, recipient, result.PersonalityInsights, emotions, retrieved)
+		if memCard != nil {
+			memCard.DataFields = dataFields
+			result.Cards = append(result.Cards, memCard)
+		}
+	}
+
 	return result, nil
 }
 
@@ -252,6 +261,15 @@ func (a *Analyzer) AnalyzeFromTranscript(ctx context.Context, sessionID, transcr
 	for _, card := range result.Cards {
 		card.DataFields = dataFields
 	}
+
+	if len(retrieved) > 0 && a.llm != nil {
+		memCard := a.cardGen.GenerateMemoryCard(ctx, a.llm, recipient, result.PersonalityInsights, confirmedEmotions, retrieved)
+		if memCard != nil {
+			memCard.DataFields = dataFields
+			result.Cards = append(result.Cards, memCard)
+		}
+	}
+
 	return result, nil
 }
 

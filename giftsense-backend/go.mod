@@ -14,6 +14,7 @@ require (
 	golang.org/x/sync v0.16.0
 	google.golang.org/protobuf v1.34.2
 	gorm.io/driver/postgres v1.6.0
+	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.31.1
 )
 
@@ -45,6 +46,7 @@ require (
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-sqlite3 v1.14.24 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect

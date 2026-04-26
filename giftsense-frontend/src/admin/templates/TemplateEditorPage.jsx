@@ -166,7 +166,7 @@ export default function TemplateEditorPage() {
 
         {activeTab === 'preview' && (
           <div className="flex-1 p-6 overflow-y-auto flex items-center justify-center">
-            <LivePreview templateId={id} />
+            <LivePreview templateId={id} template={template} />
           </div>
         )}
       </div>

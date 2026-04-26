@@ -34,6 +34,13 @@ func (h *AdminAssetHandler) List(c *gin.Context) {
 	if assets == nil {
 		assets = []usecase.AssetEntry{}
 	}
+	for i := range assets {
+		if assets[i].ThumbnailB64 == "" {
+			if b64 := h.assetLib.FindByID(assets[i].ID); b64 != nil {
+				assets[i].ThumbnailB64 = *b64
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"assets": assets})
 }
 
@@ -93,12 +100,13 @@ func (h *AdminAssetHandler) Generate(c *gin.Context) {
 		return
 	}
 
+	var savedID string
 	if h.assetLib != nil {
-		id := fmt.Sprintf("asset_%d", time.Now().UnixMilli())
-		_ = h.assetLib.SaveUpload(id, req.Style, req.Tags, result.PNGBase64)
+		savedID = fmt.Sprintf("asset_%d", time.Now().UnixMilli())
+		_ = h.assetLib.SaveUpload(savedID, req.Style, req.Tags, result.PNGBase64)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"png_base64": result.PNGBase64})
+	c.JSON(http.StatusOK, gin.H{"png_base64": result.PNGBase64, "id": savedID})
 }
 
 func (h *AdminAssetHandler) Upload(c *gin.Context) {

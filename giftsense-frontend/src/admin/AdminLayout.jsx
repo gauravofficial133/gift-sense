@@ -1,9 +1,12 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { LayoutTemplate, Image, Gift } from 'lucide-react'
+import { LayoutTemplate, Image, Gift, BarChart3, MessageSquare, Layers } from 'lucide-react'
 
 const navItems = [
+  { to: '/admin/dashboard', label: 'Dashboard', icon: BarChart3 },
   { to: '/admin/templates', label: 'Templates', icon: LayoutTemplate },
   { to: '/admin/assets', label: 'Assets', icon: Image },
+  { to: '/admin/families', label: 'Families', icon: Layers },
+  { to: '/admin/feedback', label: 'Interactions', icon: MessageSquare },
 ]
 
 export default function AdminLayout() {

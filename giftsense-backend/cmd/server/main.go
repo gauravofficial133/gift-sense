@@ -10,6 +10,7 @@ import (
 	"github.com/giftsense/backend/config"
 	"github.com/giftsense/backend/internal/adapter/cardrender"
 	"github.com/giftsense/backend/internal/adapter/feedbackstore"
+	"github.com/giftsense/backend/internal/adapter/interactionstore"
 	"github.com/giftsense/backend/internal/adapter/linkgen"
 	"github.com/giftsense/backend/internal/adapter/templatestore"
 	anthropicAdapter "github.com/giftsense/backend/internal/adapter/anthropic"
@@ -202,7 +203,7 @@ func main() {
 	v1.POST("/cards/re-render", cardHandler.ReRender)
 	v1.GET("/cards/palettes", cardHandler.ListPalettes)
 
-	adminTemplateHandler := handler.NewAdminTemplateHandler(tplManager, htmlCompiler, renderer)
+	adminTemplateHandler := handler.NewAdminTemplateHandler(tplManager, htmlCompiler, renderer, assetLib)
 	admin := v1.Group("/admin")
 	admin.GET("/templates", adminTemplateHandler.List)
 	admin.GET("/templates/:id", adminTemplateHandler.Get)
@@ -210,6 +211,7 @@ func main() {
 	admin.PUT("/templates/:id", adminTemplateHandler.Update)
 	admin.DELETE("/templates/:id", adminTemplateHandler.Delete)
 	admin.POST("/templates/:id/preview", adminTemplateHandler.Preview)
+	admin.GET("/templates/:id/thumbnail", adminTemplateHandler.GetThumbnail)
 	admin.POST("/templates/:id/duplicate", adminTemplateHandler.Duplicate)
 
 	assetPlanner := usecase.NewAssetPromptPlanner(llmClient)
@@ -218,6 +220,24 @@ func main() {
 	admin.POST("/assets/plan-prompt", adminAssetHandler.PlanPrompt)
 	admin.POST("/assets/generate", adminAssetHandler.Generate)
 	admin.POST("/assets/upload", adminAssetHandler.Upload)
+
+	interactionStore, interactionErr := interactionstore.NewSQLiteStore("data/interactions.db")
+	if interactionErr != nil {
+		log.Printf("WARNING: Interaction logging disabled: %v", interactionErr)
+	}
+	var interactionService *usecase.InteractionService
+	if interactionStore != nil {
+		interactionService = usecase.NewInteractionService(interactionStore)
+		interactionHandler := handler.NewInteractionHandler(interactionService)
+		v1.POST("/interactions", interactionHandler.LogInteraction)
+		log.Println("Interaction logging enabled (SQLite)")
+	}
+
+	dashboardService := usecase.NewDashboardService(interactionService, tplStore)
+	dashboardHandler := handler.NewAdminDashboardHandler(dashboardService)
+	admin.GET("/dashboard/overview", dashboardHandler.Overview)
+	admin.GET("/dashboard/interactions", dashboardHandler.Interactions)
+	admin.GET("/dashboard/families", dashboardHandler.Families)
 
 	v1.GET("/spotify/search", spotifyHandler.Search)
 	v1.GET("/spotify/track/:id/features", spotifyHandler.GetAudioFeatures)

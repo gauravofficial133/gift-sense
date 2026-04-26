@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/giftsense/backend/internal/domain"
@@ -87,4 +88,14 @@ func (m *TemplateManager) Duplicate(ctx context.Context, id string) (*domain.Tem
 		return nil, fmt.Errorf("save duplicate: %w", err)
 	}
 	return &dup, nil
+}
+
+func (m *TemplateManager) SavePreview(ctx context.Context, id string, pngBase64 string) {
+	if err := m.store.SavePreview(ctx, id, pngBase64); err != nil {
+		log.Printf("save preview for %s: %v", id, err)
+	}
+}
+
+func (m *TemplateManager) GetPreview(ctx context.Context, id string) (string, error) {
+	return m.store.GetPreview(ctx, id)
 }

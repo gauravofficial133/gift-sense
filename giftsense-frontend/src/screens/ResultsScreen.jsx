@@ -35,7 +35,7 @@ export default function ResultsScreen({ result, onReset, sessionId, budgetTier, 
           <section className="mb-6">
             <h2 className="text-base font-semibold text-gray-800 mb-3">Greeting cards</h2>
             <p className="text-xs text-gray-400 mb-3">Tap a card to preview and download PDF</p>
-            <CardGrid cards={cards} recipientName={recipientName} onCardsChange={setCards} />
+            <CardGrid cards={cards} recipientName={recipientName} sessionId={sessionId} onCardsChange={setCards} />
           </section>
         )}
 

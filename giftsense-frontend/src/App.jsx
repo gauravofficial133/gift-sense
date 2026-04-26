@@ -11,9 +11,12 @@ import RecipientStep from './components/steps/RecipientStep'
 import EmotionStep from './components/steps/EmotionStep'
 import ResultsStep from './components/steps/ResultsStep'
 import AdminLayout from './admin/AdminLayout'
+import DashboardPage from './admin/DashboardPage'
 import TemplateListPage from './admin/templates/TemplateListPage'
 import TemplateEditorPage from './admin/templates/TemplateEditorPage'
 import AssetPage from './admin/AssetPage'
+import FamilyManager from './admin/FamilyManager'
+import FeedbackBrowser from './admin/FeedbackBrowser'
 import {
   analyzeConversation,
   analyzeAudio,
@@ -256,9 +259,13 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/admin" element={<AdminLayout />}>
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route index element={<DashboardPage />} />
           <Route path="templates" element={<TemplateListPage />} />
           <Route path="templates/:id/edit" element={<TemplateEditorPage />} />
           <Route path="assets" element={<AssetPage />} />
+          <Route path="families" element={<FamilyManager />} />
+          <Route path="feedback" element={<FeedbackBrowser />} />
         </Route>
         <Route path="/*" element={<WizardApp />} />
       </Routes>

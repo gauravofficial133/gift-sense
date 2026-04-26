@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,6 +83,10 @@ func (g *CardGenerator) Generate(ctx context.Context, recipient domain.Recipient
 	}
 
 	wg.Wait()
+
+	occasionKey := string(DetectOccasion(recipient.Occasion))
+	cards = ScoreCards(cards, occasionKey, emotions, templates)
+
 	return cards
 }
 
@@ -106,10 +111,24 @@ func (g *CardGenerator) buildJobs() []cardJob {
 }
 
 func (g *CardGenerator) generateOne(ctx context.Context, job cardJob, recipient domain.RecipientDetails, insights []domain.PersonalityInsight, emotions []domain.EmotionSignal, templates []domain.TemplateDefinition) (*domain.CardRender, error) {
-	dir, err := DirectArtWithTemplates(ctx, job.llm, recipient, insights, emotions, job.variation, templates)
+	start := time.Now()
+
+	sel, err := SelectTemplate(ctx, job.llm, recipient, insights, emotions, job.variation, templates)
 	if err != nil {
-		return nil, fmt.Errorf("art direction: %w", err)
+		return nil, fmt.Errorf("template selection: %w", err)
 	}
+
+	tplDef := g.findTemplate(sel.TemplateID, templates)
+	if tplDef == nil {
+		return nil, fmt.Errorf("template not found: %s", sel.TemplateID)
+	}
+
+	copy, err := WriteCopy(ctx, job.llm, recipient, insights, emotions, job.variation, sel, *tplDef)
+	if err != nil {
+		return nil, fmt.Errorf("copywriting: %w", err)
+	}
+
+	dir := MergeArtDirection(sel, copy)
 
 	palette, ok := GetNamedPalette(dir.PaletteName)
 	if !ok {
@@ -126,11 +145,6 @@ func (g *CardGenerator) generateOne(ctx context.Context, job cardJob, recipient 
 		Recipient:   recipient.Name,
 		Emotions:    emotions,
 		OccasionKey: occasionKey,
-	}
-
-	tplDef := g.findTemplate(dir.TemplateID, templates)
-	if tplDef == nil {
-		return nil, fmt.Errorf("template not found: %s", dir.TemplateID)
 	}
 
 	illustrations := make(map[string]string)
@@ -178,14 +192,139 @@ func (g *CardGenerator) generateOne(ctx context.Context, job cardJob, recipient 
 		return nil, fmt.Errorf("render: %w", err)
 	}
 
-	return &domain.CardRender{
+	genMs := time.Since(start).Milliseconds()
+
+	render := &domain.CardRender{
 		PreviewPNG:   result,
 		RecipeID:     dir.TemplateID,
 		PaletteName:  dir.PaletteName,
 		Content:      content,
 		Model:        job.model,
 		Illustration: illustration,
-	}, nil
+		Meta: &domain.CardMeta{
+			Model:          job.model,
+			GenerationMs:   genMs,
+			TemplateTier:   tplDef.Tier,
+			TemplateFamily: tplDef.Family,
+			Orientation:    tplDef.Canvas.Orientation,
+			Variation:      job.variation,
+		},
+	}
+
+	validation := ValidateCard(render, *tplDef, palette)
+	render.Meta.Validation = &validation
+
+	return render, nil
+}
+
+func (g *CardGenerator) GenerateMemoryCard(ctx context.Context, llm port.LLMClient, recipient domain.RecipientDetails, insights []domain.PersonalityInsight, emotions []domain.EmotionSignal, chunks []domain.Chunk) *domain.CardRender {
+	if g.renderer == nil || g.compiler == nil || g.tplStore == nil {
+		return nil
+	}
+
+	memories, err := ExtractMemories(ctx, llm, chunks, recipient)
+	if err != nil {
+		log.Printf("memory extraction failed: %v", err)
+		return nil
+	}
+
+	tplDef, err := g.tplStore.Get(ctx, "memory-evidence")
+	if err != nil {
+		log.Printf("memory-evidence template not found: %v", err)
+		return nil
+	}
+
+	sel := TemplateSelection{
+		TemplateID:           "memory-evidence",
+		PaletteName:          pickPaletteForEmotions(emotions),
+		GenerateIllustration: false,
+	}
+
+	copy, err := WriteCopy(ctx, llm, recipient, insights, emotions, "warm and nostalgic", sel, *tplDef)
+	if err != nil {
+		log.Printf("memory card copywriting failed: %v", err)
+		return nil
+	}
+
+	palette, ok := GetNamedPalette(sel.PaletteName)
+	if !ok {
+		palette = GetEmotionPalette(DetectEmotionGroup(emotions))
+	}
+
+	content := domain.CardContent{
+		Headline:    copy.Headline,
+		Body:        buildMemoryBody(memories),
+		Closing:     copy.Closing,
+		Signature:   copy.Signature,
+		Recipient:   recipient.Name,
+		Emotions:    emotions,
+		OccasionKey: string(DetectOccasion(recipient.Occasion)),
+	}
+
+	html, err := g.compiler.Compile(CompileInput{
+		Template:      *tplDef,
+		Palette:       palette,
+		Content:       content,
+		Illustrations: make(map[string]string),
+		DataFields:    make(map[string]string),
+		Photos:        make(map[string]string),
+		FontChoices:   make(map[string]string),
+		Seed:          time.Now().UnixNano(),
+	})
+	if err != nil {
+		log.Printf("memory card compile failed: %v", err)
+		return nil
+	}
+
+	result, err := g.renderer.RenderPNG(html, tplDef.Canvas.Width, tplDef.Canvas.Height)
+	if err != nil {
+		log.Printf("memory card render failed: %v", err)
+		return nil
+	}
+
+	return &domain.CardRender{
+		PreviewPNG:  result,
+		RecipeID:    "memory-evidence",
+		PaletteName: sel.PaletteName,
+		Content:     content,
+		Model:       "openai",
+		CardType:    "memory_evidence",
+		Evidences:   memories,
+		Meta: &domain.CardMeta{
+			Model:          "openai",
+			TemplateTier:   tplDef.Tier,
+			TemplateFamily: tplDef.Family,
+			Orientation:    tplDef.Canvas.Orientation,
+			Variation:      "memory evidence",
+		},
+	}
+}
+
+func pickPaletteForEmotions(emotions []domain.EmotionSignal) string {
+	group := DetectEmotionGroup(emotions)
+	for _, p := range namedPalettes {
+		for _, e := range p.Emotions {
+			if e == group {
+				return p.Name
+			}
+		}
+	}
+	return "sunrise_warmth"
+}
+
+func buildMemoryBody(memories []domain.MemoryEvidence) string {
+	if len(memories) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(memories))
+	for _, m := range memories {
+		parts = append(parts, fmt.Sprintf("\"%s\"", m.Quote))
+	}
+	body := strings.Join(parts, " ... ")
+	if len(body) > 240 {
+		body = body[:237] + "..."
+	}
+	return body
 }
 
 func (g *CardGenerator) findTemplate(id string, templates []domain.TemplateDefinition) *domain.TemplateDefinition {

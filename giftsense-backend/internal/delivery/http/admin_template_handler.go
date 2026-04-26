@@ -15,10 +15,11 @@ type AdminTemplateHandler struct {
 	manager  *usecase.TemplateManager
 	compiler *usecase.HTMLCompiler
 	renderer *cardrender.Renderer
+	assetLib *usecase.AssetLibrary
 }
 
-func NewAdminTemplateHandler(manager *usecase.TemplateManager, compiler *usecase.HTMLCompiler, renderer *cardrender.Renderer) *AdminTemplateHandler {
-	return &AdminTemplateHandler{manager: manager, compiler: compiler, renderer: renderer}
+func NewAdminTemplateHandler(manager *usecase.TemplateManager, compiler *usecase.HTMLCompiler, renderer *cardrender.Renderer, assetLib *usecase.AssetLibrary) *AdminTemplateHandler {
+	return &AdminTemplateHandler{manager: manager, compiler: compiler, renderer: renderer, assetLib: assetLib}
 }
 
 func (h *AdminTemplateHandler) List(c *gin.Context) {
@@ -95,39 +96,58 @@ func (h *AdminTemplateHandler) Duplicate(c *gin.Context) {
 
 func (h *AdminTemplateHandler) Preview(c *gin.Context) {
 	id := c.Param("id")
-	tpl, err := h.manager.Get(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
-		return
+
+	var tpl domain.TemplateDefinition
+	if err := c.ShouldBindJSON(&tpl); err == nil && len(tpl.Elements) > 0 {
+		if tpl.ID == "" {
+			tpl.ID = id
+		}
+	} else {
+		saved, err := h.manager.Get(c.Request.Context(), id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
+			return
+		}
+		tpl = *saved
 	}
 
-	palette := domain.CardPalette{
-		Background:          "#FFF5E6",
-		BackgroundSecondary: "#FFEDD5",
-		Primary:             "#D4451A",
-		Accent:              "#FFB347",
-		Ink:                 "#5C3D2E",
-		Muted:               "#78716C",
-		Overlay:             "rgba(255,180,71,0.1)",
-	}
+	seed := time.Now().UnixNano()
+	palette := usecase.PickPreviewPaletteVaried(tpl, seed)
+	content := usecase.BuildPreviewContentVaried(tpl, seed)
+	fontChoices := usecase.PickPreviewFontsVaried(tpl, seed)
 
-	content := domain.CardContent{
-		Headline:  "Happy Birthday, Alex!",
-		Body:      "Wishing you a wonderful day filled with joy and laughter. May all your dreams come true.",
-		Closing:   "With all my love",
-		Signature: "Yours always,",
-		Recipient: "Alex",
+	illustrations := make(map[string]string)
+	if h.assetLib != nil {
+		for _, el := range tpl.Elements {
+			if el.IllustrationSlot != nil {
+				slotName := el.IllustrationSlot.SlotName
+				if el.Decorative != nil && el.Decorative.AssetID != "" {
+					if b64 := h.assetLib.FindByID(el.Decorative.AssetID); b64 != nil {
+						illustrations[slotName] = *b64
+					}
+				}
+				if _, ok := illustrations[slotName]; !ok {
+					all := h.assetLib.ListAssets(nil, el.IllustrationSlot.StyleHint)
+					if len(all) > 0 {
+						pick := all[seed%int64(len(all))]
+						if b64 := h.assetLib.FindByID(pick.ID); b64 != nil {
+							illustrations[slotName] = *b64
+						}
+					}
+				}
+			}
+		}
 	}
 
 	html, err := h.compiler.Compile(usecase.CompileInput{
-		Template:      *tpl,
+		Template:      tpl,
 		Palette:       palette,
 		Content:       content,
-		Illustrations: make(map[string]string),
-		DataFields:    map[string]string{"message_count": "1247", "top_emoji": "❤️"},
+		Illustrations: illustrations,
+		DataFields:    map[string]string{"message_count": "1,247", "top_emoji": "❤️", "top_artist": "Taylor Swift", "hours_listened": "342"},
 		Photos:        make(map[string]string),
-		FontChoices:   make(map[string]string),
-		Seed:          time.Now().UnixNano(),
+		FontChoices:   fontChoices,
+		Seed:          seed,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "compile failed: " + err.Error()})
@@ -145,5 +165,17 @@ func (h *AdminTemplateHandler) Preview(c *gin.Context) {
 		return
 	}
 
+	h.manager.SavePreview(c.Request.Context(), id, png)
+
+	c.JSON(http.StatusOK, gin.H{"preview_png": png})
+}
+
+func (h *AdminTemplateHandler) GetThumbnail(c *gin.Context) {
+	id := c.Param("id")
+	png, err := h.manager.GetPreview(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no preview available"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"preview_png": png})
 }

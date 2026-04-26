@@ -216,7 +216,7 @@ func (c *HTMLCompiler) writeElement(sb *strings.Builder, el domain.Element, inpu
 		c.writeDataSlot(sb, el, input.DataFields)
 	case "decorative":
 		c.writeDecorative(sb, el)
-	case "ai_illustration_slot":
+	case "ai_illustration_slot", "illustration_slot":
 		c.writeIllustration(sb, el, input.Illustrations)
 	}
 	return nil

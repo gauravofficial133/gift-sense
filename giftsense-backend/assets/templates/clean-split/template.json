@@ -2,6 +2,7 @@
   "version": 1,
   "id": "clean-split",
   "name": "Clean Split",
+  "family": "clean",
   "created_at": "2026-04-24T00:00:00Z",
   "updated_at": "2026-04-24T00:00:00Z",
   "occasions": ["birthday", "anniversary", "mothers_day", "friendship", "default"],

@@ -66,7 +66,7 @@ export default function ResultsStep() {
         <section>
           <h3 className="text-sm font-semibold text-gray-800 mb-2">Greeting cards</h3>
           <p className="text-xs text-gray-400 mb-3">Tap a card to preview and download PDF</p>
-          <CardGrid cards={cards} recipientName={formData.name} />
+          <CardGrid cards={cards} recipientName={formData.name} sessionId={sessionId} />
         </section>
       )}
 

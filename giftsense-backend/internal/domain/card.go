@@ -58,4 +58,43 @@ type CardRender struct {
 	Illustration  *CardIllustration `json:"illustration,omitempty"`
 	DataFields    map[string]string `json:"data_fields,omitempty"`
 	Photos        map[string]string `json:"photos,omitempty"`
+	CardType      string            `json:"card_type,omitempty"`
+	Meta          *CardMeta         `json:"meta,omitempty"`
+	Evidences     []MemoryEvidence  `json:"evidences,omitempty"`
+}
+
+type CardMeta struct {
+	Model             string            `json:"model"`
+	GenerationMs      int64             `json:"generation_ms"`
+	TemplateTier      string            `json:"template_tier"`
+	TemplateFamily    string            `json:"template_family"`
+	Orientation       string            `json:"orientation"`
+	EmotionMatchScore float64           `json:"emotion_match_score"`
+	Variation         string            `json:"variation"`
+	Validation        *ValidationResult `json:"validation,omitempty"`
+	Scoring           *ScoringBreakdown `json:"scoring,omitempty"`
+}
+
+type ValidationResult struct {
+	TextOverflow     bool    `json:"text_overflow"`
+	ContrastRatio    float64 `json:"contrast_ratio"`
+	ContrastPassed   bool    `json:"contrast_passed"`
+	IllustrationOK   bool    `json:"illustration_ok"`
+	CompositionScore float64 `json:"composition_score"`
+	OverallPass      bool    `json:"overall_pass"`
+	Issues           []string `json:"issues,omitempty"`
+}
+
+type ScoringBreakdown struct {
+	TemplateOccasionFit float64 `json:"template_occasion_fit"`
+	CopyQuality         float64 `json:"copy_quality"`
+	VisualHarmony       float64 `json:"visual_harmony"`
+	Originality         float64 `json:"originality"`
+	TotalScore          float64 `json:"total_score"`
+}
+
+type MemoryEvidence struct {
+	Quote   string `json:"quote"`
+	Context string `json:"context"`
+	Emotion string `json:"emotion"`
 }

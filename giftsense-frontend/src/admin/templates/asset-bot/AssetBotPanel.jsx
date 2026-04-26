@@ -11,9 +11,9 @@ export default function AssetBotPanel() {
   const [purpose, setPurpose] = useState('hero illustration')
   const [refinedPrompt, setRefinedPrompt] = useState('')
   const [generatedPng, setGeneratedPng] = useState(null)
+  const [generatedId, setGeneratedId] = useState(null)
   const [refining, setRefining] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   async function handleRefine() {
     setRefining(true)
@@ -32,7 +32,7 @@ export default function AssetBotPanel() {
 
   async function handleGenerate() {
     setGenerating(true)
-    setSaved(false)
+    setGeneratedId(null)
     try {
       const result = await assetApi.generate({
         prompt: refinedPrompt,
@@ -40,19 +40,10 @@ export default function AssetBotPanel() {
         tags: [purpose, subject].filter(Boolean),
       })
       setGeneratedPng(result.png_base64)
+      setGeneratedId(result.id || null)
     } finally {
       setGenerating(false)
     }
-  }
-
-  async function handleSave() {
-    if (!generatedPng) return
-    await assetApi.upload({
-      png_base64: generatedPng,
-      style,
-      tags: [purpose, subject].filter(Boolean),
-    })
-    setSaved(true)
   }
 
   return (
@@ -103,10 +94,12 @@ export default function AssetBotPanel() {
       {generatedPng && (
         <div className="space-y-2">
           <img src={`data:image/png;base64,${generatedPng}`} alt="Generated asset" className="rounded-lg border border-gray-200 max-w-full" />
-          <button onClick={handleSave} disabled={saved} className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors">
-            <Save className="w-4 h-4" />
-            {saved ? 'Saved to Library' : 'Save to Library'}
-          </button>
+          {generatedId && (
+            <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+              <Save className="w-3 h-3" />
+              Auto-saved to library · {generatedId}
+            </p>
+          )}
         </div>
       )}
     </div>

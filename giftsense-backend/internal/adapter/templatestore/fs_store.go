@@ -80,6 +80,28 @@ func (s *FSStore) Delete(ctx context.Context, id string) error {
 	return os.RemoveAll(dir)
 }
 
+func (s *FSStore) SavePreview(ctx context.Context, id string, pngBase64 string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dir := filepath.Join(s.baseDir, id)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return fmt.Errorf("template dir not found: %s", id)
+	}
+	return os.WriteFile(filepath.Join(dir, "preview.txt"), []byte(pngBase64), 0644)
+}
+
+func (s *FSStore) GetPreview(ctx context.Context, id string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := os.ReadFile(filepath.Join(s.baseDir, id, "preview.txt"))
+	if err != nil {
+		return "", fmt.Errorf("read preview %s: %w", id, err)
+	}
+	return string(data), nil
+}
+
 func (s *FSStore) load(id string) (*domain.TemplateDefinition, error) {
 	data, err := os.ReadFile(filepath.Join(s.baseDir, id, "template.json"))
 	if err != nil {

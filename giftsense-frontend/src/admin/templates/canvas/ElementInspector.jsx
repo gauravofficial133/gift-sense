@@ -27,12 +27,12 @@ export default function ElementInspector({ element, onUpdate, onDelete }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Field label="X" type="number" value={element.position?.x || 0} onChange={v => onUpdate({ position: { ...element.position, x: parseInt(v) } })} />
-        <Field label="Y" type="number" value={element.position?.y || 0} onChange={v => onUpdate({ position: { ...element.position, y: parseInt(v) } })} />
-        <Field label="W" type="number" value={element.size?.w || 100} onChange={v => onUpdate({ size: { ...element.size, w: parseInt(v) } })} />
-        <Field label="H" type="number" value={element.size?.h || 50} onChange={v => onUpdate({ size: { ...element.size, h: parseInt(v) } })} />
-        <Field label="Z" type="number" value={element.z_index} onChange={v => onUpdate({ z_index: parseInt(v) })} />
-        <Field label="Rot" type="number" value={element.rotation || 0} onChange={v => onUpdate({ rotation: parseFloat(v) })} />
+        <Field label="X" type="number" value={element.position?.x || 0} onChange={v => onUpdate({ position: { ...element.position, x: safeInt(v, 0) } })} />
+        <Field label="Y" type="number" value={element.position?.y || 0} onChange={v => onUpdate({ position: { ...element.position, y: safeInt(v, 0) } })} />
+        <Field label="W" type="number" value={element.size?.w || 100} onChange={v => onUpdate({ size: { ...element.size, w: Math.max(1, safeInt(v, 100)) } })} />
+        <Field label="H" type="number" value={element.size?.h || 50} onChange={v => onUpdate({ size: { ...element.size, h: Math.max(1, safeInt(v, 50)) } })} />
+        <Field label="Z" type="number" value={element.z_index} onChange={v => onUpdate({ z_index: safeInt(v, 0) })} />
+        <Field label="Rot" type="number" value={element.rotation || 0} onChange={v => onUpdate({ rotation: safeFloat(v, 0) })} />
       </div>
 
       <div className="border-t border-gray-100 pt-3">
@@ -45,7 +45,7 @@ export default function ElementInspector({ element, onUpdate, onDelete }) {
         {element.type === 'data_slot' && (
           <DataSlotConfig config={element.data_slot} onChange={data_slot => onUpdate({ data_slot })} />
         )}
-        {element.type === 'ai_illustration_slot' && (
+        {(element.type === 'ai_illustration_slot' || element.type === 'illustration_slot') && (
           <IllustrationSlotConfig config={element.illustration_slot} onChange={illustration_slot => onUpdate({ illustration_slot })} />
         )}
         {element.type === 'decorative' && (
@@ -54,6 +54,16 @@ export default function ElementInspector({ element, onUpdate, onDelete }) {
       </div>
     </div>
   )
+}
+
+function safeInt(v, fallback) {
+  const n = parseInt(v, 10)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function safeFloat(v, fallback) {
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : fallback
 }
 
 function Field({ label, type, value, onChange }) {
